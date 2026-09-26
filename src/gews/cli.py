@@ -131,16 +131,30 @@ def download(config: str, site: str | None) -> None:
 
     for cfg in site_configs:
         site_name = cfg["site"]["name"]
+        acq = cfg.get("acquire", {})
         click.echo(f"\nDownloading: {site_name}")
-        scenes = search_scenes(cfg)
-        track = select_track(scenes, cfg["acquire"].get("path_number"))
 
-        acq = cfg["acquire"]
-        download_scenes(
-            track,
-            output_dir=acq.get("output_dir", "data/slc"),
-            n_workers=acq.get("n_workers", 4),
-        )
+        try:
+            scenes = search_scenes(cfg)
+            track = select_track(scenes, acq.get("path_number"))
+
+            # Route products to the correct directory
+            product_types = {s.product_type for s in track}
+            for pt in sorted(product_types):
+                pt_scenes = [s for s in track if s.product_type == pt]
+                if pt == "GUNW":
+                    out = acq.get("gunw_dir", "data/gunw")
+                elif pt == "GOFF":
+                    out = acq.get("goff_dir", "data/goff")
+                else:
+                    out = acq.get("output_dir", "data/slc")
+                download_scenes(
+                    pt_scenes,
+                    output_dir=out,
+                    n_workers=acq.get("n_workers", 4),
+                )
+        except Exception as e:
+            click.echo(f"  Error downloading {site_name}: {e}", err=True)
 
 
 @main.command()
