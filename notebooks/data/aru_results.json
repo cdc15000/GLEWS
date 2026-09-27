@@ -242,7 +242,7 @@
   ],
   "validation_verdict": {
     "result": "PASS",
-    "detail": "GEWS detection pipeline successfully identified precursory acceleration in synthetic data matching the Aru collapse observations for both events.",
+    "detail": "GLEWS detection pipeline successfully identified precursory acceleration in synthetic data matching the Aru collapse observations for both events.",
     "note": "This is a synthetic validation -- the system detected a signal it was designed to detect. Real-world performance depends on actual InSAR data quality, atmospheric conditions, and temporal sampling."
   }
 }

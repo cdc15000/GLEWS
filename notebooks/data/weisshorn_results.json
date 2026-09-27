@@ -43,7 +43,7 @@
     "GOFF pixel offsets failed on this site (45-50\u00b0 slopes, cm-scale motion)",
     "GUNW InSAR successfully detects the motion despite low coherence (0.10)",
     "Only 3 dates available \u2014 insufficient for robust z-score anomaly detection",
-    "With more epochs, the GEWS pipeline WOULD flag this as anomalous"
+    "With more epochs, the GLEWS pipeline WOULD flag this as anomalous"
   ],
   "goff_result": {
     "status": "failed",

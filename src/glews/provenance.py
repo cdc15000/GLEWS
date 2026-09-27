@@ -18,7 +18,7 @@ Two complementary logs:
 
 Usage::
 
-    from gews.provenance import ProvenanceTracker, AlertAuditLog
+    from glews.provenance import ProvenanceTracker, AlertAuditLog
 
     tracker = ProvenanceTracker()
     with tracker.track("detect", "Aletsch Glacier") as ctx:
@@ -42,7 +42,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Generator
 
-from gews import __version__
+from glews import __version__
 
 logger = logging.getLogger(__name__)
 

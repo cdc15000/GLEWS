@@ -1,79 +1,79 @@
-# Prometheus alerting rules for GEWS
+# Prometheus alerting rules for GLEWS
 groups:
-  - name: gews.pipeline
+  - name: glews.pipeline
     rules:
       # Pipeline failure — monitor job exited with an error
-      - alert: GEWSPipelineFailure
+      - alert: GLEWSPipelineFailure
         expr: |
-          gews_monitor_last_exit_code != 0
+          glews_monitor_last_exit_code != 0
         for: 5m
         labels:
           severity: critical
           component: monitor
         annotations:
-          summary: "GEWS monitor pipeline failed"
+          summary: "GLEWS monitor pipeline failed"
           description: >-
-            The most recent GEWS monitor run exited with code
+            The most recent GLEWS monitor run exited with code
             {{ $value }}. Check container logs for details.
 
       # Stale data — no successful run in the last 36 hours
-      - alert: GEWSStaleData
+      - alert: GLEWSStaleData
         expr: |
-          time() - gews_monitor_last_success_timestamp_seconds > 36 * 3600
+          time() - glews_monitor_last_success_timestamp_seconds > 36 * 3600
         for: 10m
         labels:
           severity: warning
           component: monitor
         annotations:
-          summary: "GEWS data is stale (>36 h since last successful run)"
+          summary: "GLEWS data is stale (>36 h since last successful run)"
           description: >-
             No successful monitor run has completed in
             {{ $value | humanizeDuration }}. The pipeline may be stuck
             or the CronJob/scheduled task may have stopped firing.
 
       # Flag spike — unusually high number of new flags in a single run
-      - alert: GEWSFlagSpike
+      - alert: GLEWSFlagSpike
         expr: |
-          increase(gews_flags_raised_total[6h]) > 10
+          increase(glews_flags_raised_total[6h]) > 10
         for: 0m
         labels:
           severity: warning
           component: monitor
         annotations:
-          summary: "Spike in GEWS detection flags"
+          summary: "Spike in GLEWS detection flags"
           description: >-
             {{ $value }} new flags were raised in the last 6 hours,
             which exceeds the expected baseline. Review the dashboard
             for possible widespread displacement events.
 
-  - name: gews.dashboard
+  - name: glews.dashboard
     rules:
       # Dashboard down
-      - alert: GEWSDashboardDown
-        expr: up{job="gews-dashboard"} == 0
+      - alert: GLEWSDashboardDown
+        expr: up{job="glews-dashboard"} == 0
         for: 5m
         labels:
           severity: critical
           component: dashboard
         annotations:
-          summary: "GEWS dashboard is unreachable"
+          summary: "GLEWS dashboard is unreachable"
           description: >-
-            Prometheus cannot scrape the GEWS dashboard at
+            Prometheus cannot scrape the GLEWS dashboard at
             {{ $labels.instance }}. The service may be down or
             the network path is broken.
 
       # High request latency
-      - alert: GEWSDashboardHighLatency
+      - alert: GLEWSDashboardHighLatency
         expr: |
           histogram_quantile(0.95,
-            rate(gews_dashboard_request_duration_seconds_bucket[5m])
+            rate(glews_dashboard_request_duration_seconds_bucket[5m])
           ) > 2
         for: 10m
         labels:
           severity: warning
           component: dashboard
         annotations:
-          summary: "GEWS dashboard p95 latency > 2 s"
+          summary: "GLEWS dashboard p95 latency > 2 s"
           description: >-
             The 95th-percentile response time is {{ $value | humanize }}s.
             The dashboard may be under heavy load or the output volume

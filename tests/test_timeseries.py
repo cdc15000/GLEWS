@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from gews.timeseries import (
+from glews.timeseries import (
     AccelerationMap,
     ChangePointResult,
     DecomposedPixel,

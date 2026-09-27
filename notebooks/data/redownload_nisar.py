@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Re-download NISAR products from ASF. Run from the gews project root."""
+"""Re-download NISAR products from ASF. Run from the glews project root."""
 import asf_search as asf
 import netrc
 from pathlib import Path

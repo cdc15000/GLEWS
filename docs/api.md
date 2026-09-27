@@ -1,10 +1,10 @@
-# GEWS API Reference
+# GLEWS API Reference
 
-Public API for all modules in `src/gews/`.
+Public API for all modules in `src/glews/`.
 
 ---
 
-## `gews.acquire` — Sentinel-1 SLC Search and Download
+## `glews.acquire` — Sentinel-1 SLC Search and Download
 
 Search and download Sentinel-1 SLC scenes from the Alaska Satellite
 Facility (ASF) DAAC archive.
@@ -74,7 +74,7 @@ date ranges, revisit intervals, total download size).
 
 ---
 
-## `gews.alerts` — Alert Dispatch
+## `glews.alerts` — Alert Dispatch
 
 Email (SMTP), Slack (webhook), and generic webhook alert channels.
 
@@ -140,7 +140,7 @@ lists. Missing variables expand to the empty string.
 
 ---
 
-## `gews.atmosphere` — Atmospheric Phase Screen Detection
+## `glews.atmosphere` — Atmospheric Phase Screen Detection
 
 Detect and correct atmospheric phase screens (APS) that contaminate
 InSAR displacement measurements.
@@ -197,7 +197,7 @@ class APSDetector:
 
 ---
 
-## `gews.cascade` — Tier 1 Cascade Risk Assessment
+## `glews.cascade` — Tier 1 Cascade Risk Assessment
 
 Evaluate whether a flagged unstable site can produce a dangerous
 downstream cascade.
@@ -314,7 +314,7 @@ Produce a human-readable summary table of population exposure by site.
 
 ---
 
-## `gews.classifier` — Pre-Failure Pattern Classifier
+## `glews.classifier` — Pre-Failure Pattern Classifier
 
 Transfer learning classifier for pre-failure pattern detection using
 logistic regression (numpy only).
@@ -408,30 +408,30 @@ evaluation metrics (accuracy, precision, recall).
 
 ---
 
-## `gews.cli` — Command-Line Interface
+## `glews.cli` — Command-Line Interface
 
-Click-based CLI. Entry point: `gews = "gews.cli:main"`.
+Click-based CLI. Entry point: `glews = "glews.cli:main"`.
 
 ### Commands
 
 | Command | Description |
 |---------|-------------|
-| `gews search -c CONFIG` | Search ASF for available Sentinel-1 scenes |
-| `gews download -c CONFIG` | Download SLC scenes from ASF |
-| `gews process -c CONFIG [--step STEP] [--dry-run]` | Run ISCE-2 + MintPy processing |
-| `gews detect -c CONFIG [-o DIR]` | Run Tier 0 anomaly detection |
-| `gews assess -c CONFIG` | Run Tier 1 cascade risk assessment |
-| `gews monitor -c CONFIG [--interval H] [--check-now]` | Continuous monitoring loop |
-| `gews dashboard -c CONFIG [--port P] [--data-dir DIR]` | Launch Tier 2 analyst dashboard |
-| `gews map [--data-dir DIR] [--port P]` | Launch interactive map viewer |
-| `gews demo [-o DIR] [--no-plots]` | Run full pipeline on synthetic data |
-| `gews validate -c CONFIG` | Validate a configuration file |
-| `gews info` | Show version, dependencies, available configs |
-| `gews version` | Show version |
+| `glews search -c CONFIG` | Search ASF for available Sentinel-1 scenes |
+| `glews download -c CONFIG` | Download SLC scenes from ASF |
+| `glews process -c CONFIG [--step STEP] [--dry-run]` | Run ISCE-2 + MintPy processing |
+| `glews detect -c CONFIG [-o DIR]` | Run Tier 0 anomaly detection |
+| `glews assess -c CONFIG` | Run Tier 1 cascade risk assessment |
+| `glews monitor -c CONFIG [--interval H] [--check-now]` | Continuous monitoring loop |
+| `glews dashboard -c CONFIG [--port P] [--data-dir DIR]` | Launch Tier 2 analyst dashboard |
+| `glews map [--data-dir DIR] [--port P]` | Launch interactive map viewer |
+| `glews demo [-o DIR] [--no-plots]` | Run full pipeline on synthetic data |
+| `glews validate -c CONFIG` | Validate a configuration file |
+| `glews info` | Show version, dependencies, available configs |
+| `glews version` | Show version |
 
 ---
 
-## `gews.crosscheck` — Tier 1 Quality Filters
+## `glews.crosscheck` — Tier 1 Quality Filters
 
 Cross-check InSAR anomalies against quality metrics and optical imagery.
 
@@ -508,7 +508,7 @@ flags.
 
 ---
 
-## `gews.dashboard` — Tier 2 Analyst Dashboard
+## `glews.dashboard` — Tier 2 Analyst Dashboard
 
 Lightweight web UI for glaciologists to review flagged sites.
 
@@ -537,7 +537,7 @@ Start the dashboard HTTP server (blocking). Serves at
 
 ---
 
-## `gews.detect` — Tier 0 Anomaly Detection
+## `glews.detect` — Tier 0 Anomaly Detection
 
 Identify spatially coherent clusters of anomalous acceleration.
 
@@ -593,7 +593,7 @@ Returns flags sorted by score (highest first).
 
 ---
 
-## `gews.mapview` — Interactive Map Viewer
+## `glews.mapview` — Interactive Map Viewer
 
 Leaflet.js-based map showing color-coded markers for flagged sites.
 
@@ -616,7 +616,7 @@ map), `GET /api/flags.geojson` (GeoJSON data).
 
 ---
 
-## `gews.monitor` — Operational Monitoring
+## `glews.monitor` — Operational Monitoring
 
 Continuous monitoring loop that watches configured sites for new NISAR
 acquisitions, downloads new scenes, runs the detection pipeline, and
@@ -710,7 +710,7 @@ Main operational loop.
 
 ---
 
-## `gews.nisar` — NISAR Data Loading
+## `glews.nisar` — NISAR Data Loading
 
 Load NISAR L2 GUNW (unwrapped interferograms) and GOFF (offset fields)
 HDF5 products and invert to displacement time series.
@@ -758,7 +758,7 @@ Load NISAR GOFF (pixel offset tracking) products.
 
 ---
 
-## `gews.process` — InSAR Processing Orchestration
+## `glews.process` — InSAR Processing Orchestration
 
 Wraps ISCE-2 and MintPy for interferogram generation and time-series
 inversion. Requires ISCE-2, MintPy, and SNAPHU to be installed.
@@ -794,7 +794,7 @@ class InSARProcessor:
 
 ---
 
-## `gews.report` — Report Generation
+## `glews.report` — Report Generation
 
 Generate visual reports and GeoJSON output for flagged sites.
 
@@ -823,7 +823,7 @@ Returns path to the main report file.
 
 ---
 
-## `gews.synthetic` — Synthetic Data Generator
+## `glews.synthetic` — Synthetic Data Generator
 
 Generate realistic InSAR displacement time-series data for testing.
 
@@ -868,7 +868,7 @@ a default Nepal 2026 scenario config when `config` is None.
 
 ---
 
-## `gews.timeseries` — Time-Series Analysis
+## `glews.timeseries` — Time-Series Analysis
 
 Decomposition, trend fitting, acceleration estimation, step-change
 detection, Bayesian Online Changepoint Detection (BOCPD), and Voight's
@@ -996,7 +996,7 @@ fails.
 
 ---
 
-## `gews.validate` — Configuration Validation
+## `glews.validate` — Configuration Validation
 
 Validate site configuration files against expected structure, types,
 ranges, and cross-field consistency.
@@ -1007,7 +1007,7 @@ ranges, and cross-field consistency.
 def validate_config(config: dict) -> list[str]
 ```
 
-Validate a GEWS configuration dict. Returns a list of diagnostic
+Validate a GLEWS configuration dict. Returns a list of diagnostic
 strings prefixed with `ERROR:` or `WARNING:`. Empty list means the
 configuration passed all checks.
 

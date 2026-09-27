@@ -48,7 +48,7 @@ Configuration lives under the ``tactical:`` key in the site YAML::
 
 Usage::
 
-    from gews.tactical import TacticalWarningSystem
+    from glews.tactical import TacticalWarningSystem
 
     tws = TacticalWarningSystem.from_config(site_config)
     triggers = tws.check_seismic_feeds(sites=[site_config])
@@ -546,7 +546,7 @@ class TacticalWarningSystem:
         alert : dict
             Alert record from ``generate_tactical_alert``.
         dispatcher : AlertDispatcher
-            Configured dispatcher instance (from ``gews.alerts``).
+            Configured dispatcher instance (from ``glews.alerts``).
 
         Returns
         -------

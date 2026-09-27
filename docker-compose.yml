@@ -6,22 +6,22 @@ services:
     command:
       - monitor
       - -c
-      - ${GEWS_CONFIG:-config/global_watch.yaml}
+      - ${GLEWS_CONFIG:-config/global_watch.yaml}
       - --interval
-      - "${GEWS_INTERVAL:-6}"
+      - "${GLEWS_INTERVAL:-6}"
     volumes:
       - ./config:/app/config:ro
-      - gews-data:/app/data
-      - gews-output:/app/output
+      - glews-data:/app/data
+      - glews-output:/app/output
       - ${HOME}/.netrc:/root/.netrc:ro
     environment:
-      - GEWS_SMTP_HOST=${GEWS_SMTP_HOST:-}
-      - GEWS_SMTP_PORT=${GEWS_SMTP_PORT:-587}
-      - GEWS_SMTP_USER=${GEWS_SMTP_USER:-}
-      - GEWS_SMTP_PASS=${GEWS_SMTP_PASS:-}
-      - GEWS_SMTP_TO=${GEWS_SMTP_TO:-}
-      - GEWS_SLACK_WEBHOOK=${GEWS_SLACK_WEBHOOK:-}
-      - GEWS_WEBHOOK_URL=${GEWS_WEBHOOK_URL:-}
+      - GLEWS_SMTP_HOST=${GLEWS_SMTP_HOST:-}
+      - GLEWS_SMTP_PORT=${GLEWS_SMTP_PORT:-587}
+      - GLEWS_SMTP_USER=${GLEWS_SMTP_USER:-}
+      - GLEWS_SMTP_PASS=${GLEWS_SMTP_PASS:-}
+      - GLEWS_SMTP_TO=${GLEWS_SMTP_TO:-}
+      - GLEWS_SLACK_WEBHOOK=${GLEWS_SLACK_WEBHOOK:-}
+      - GLEWS_WEBHOOK_URL=${GLEWS_WEBHOOK_URL:-}
     restart: on-failure
     logging:
       driver: json-file
@@ -34,18 +34,18 @@ services:
     command:
       - dashboard
       - -c
-      - ${GEWS_CONFIG:-config/global_watch.yaml}
+      - ${GLEWS_CONFIG:-config/global_watch.yaml}
       - --port
-      - "${GEWS_DASHBOARD_PORT:-8080}"
+      - "${GLEWS_DASHBOARD_PORT:-8080}"
       - --data-dir
       - /app/output
     ports:
-      - "${GEWS_DASHBOARD_PORT:-8080}:${GEWS_DASHBOARD_PORT:-8080}"
+      - "${GLEWS_DASHBOARD_PORT:-8080}:${GLEWS_DASHBOARD_PORT:-8080}"
     volumes:
       - ./config:/app/config:ro
-      - gews-output:/app/output:ro
+      - glews-output:/app/output:ro
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${GEWS_DASHBOARD_PORT:-8080}/')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${GLEWS_DASHBOARD_PORT:-8080}/')"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -60,5 +60,5 @@ services:
         max-file: "3"
 
 volumes:
-  gews-data:
-  gews-output:
+  glews-data:
+  glews-output:

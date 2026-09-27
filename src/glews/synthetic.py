@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 
 import numpy as np
 
-from gews.process import DisplacementTimeseries
+from glews.process import DisplacementTimeseries
 
 logger = logging.getLogger(__name__)
 

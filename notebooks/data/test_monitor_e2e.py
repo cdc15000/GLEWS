@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-End-to-end test of the GEWS monitoring module.
+End-to-end test of the GLEWS monitoring module.
 
 Runs a single check cycle against the global_watch.yaml config
 to verify the monitoring pipeline works with real ASF queries.
@@ -16,7 +16,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from gews.monitor import iter_site_configs, MonitorState, check_new_data
+from glews.monitor import iter_site_configs, MonitorState, check_new_data
 
 
 def main():
@@ -25,7 +25,7 @@ def main():
         cfg = yaml.safe_load(f)
 
     print("=" * 60)
-    print("GEWS Monitor End-to-End Test")
+    print("GLEWS Monitor End-to-End Test")
     print(f"Config: {config_path.name}")
     print(f"Time: {datetime.now().isoformat()}")
     print("=" * 60)

@@ -1,4 +1,4 @@
-# GEWS — Glacier Early Warning System
+# GLEWS — Glacier Early Warning System
 
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen)]()
 [![Tests](https://img.shields.io/badge/tests-377%20passed-brightgreen)]()
@@ -8,7 +8,7 @@
 
 Satellite-based early warning pipeline for unstable glaciers and rock slopes.
 
-GEWS screens displacement time series derived from satellite radar (Sentinel-1 C-band and NISAR L-band) for anomalous acceleration — the signal that precedes catastrophic glacier and rock-slope collapses. It implements Tier 0 (automated screening), Tier 1 (cascade risk filtering with cross-check validation), and Tier 2 (analyst dashboard) stages, plus an operational `gews monitor` mode that continuously watches 13 configured sites worldwide for new acquisitions and raises alerts via email, Slack, or webhook.
+GLEWS screens displacement time series derived from satellite radar (Sentinel-1 C-band and NISAR L-band) for anomalous acceleration — the signal that precedes catastrophic glacier and rock-slope collapses. It implements Tier 0 (automated screening), Tier 1 (cascade risk filtering with cross-check validation), and Tier 2 (analyst dashboard) stages, plus an operational `glews monitor` mode that continuously watches 13 configured sites worldwide for new acquisitions and raises alerts via email, Slack, or webhook.
 
 The Glacier Early Warning System comprises **22 Python modules** (~11 400 lines) with **377+ tests** across 18 test files, and exposes **15 CLI commands**. All tests run on synthetic data with no network access required.
 
@@ -55,7 +55,7 @@ source .venv/bin/activate
 pip install -e .
 
 # Run the demo
-gews demo --output output
+glews demo --output output
 ```
 
 This generates a synthetic InSAR scene with an injected pre-failure acceleration signal, runs anomaly detection, and produces:
@@ -71,10 +71,10 @@ Once an [Earthdata](#data-requirements) account and `~/.netrc` are configured:
 
 ```bash
 # Single check cycle against the built-in global watchlist, then exit
-gews monitor -c config/global_watch.yaml --check-now
+glews monitor -c config/global_watch.yaml --check-now
 
 # Continuous loop, checking every 6 hours (or per config)
-gews monitor -c config/global_watch.yaml --interval 6
+glews monitor -c config/global_watch.yaml --interval 6
 ```
 
 Each cycle searches ASF DAAC for new GUNW/GOFF products, downloads anything not already seen, re-runs the detection pipeline on the grown time series, and writes new alerts to `output/alerts/<site>_alerts.json`. State is checkpointed to `data/monitor_state/` so a restart resumes rather than re-alerting.
@@ -82,7 +82,7 @@ Each cycle searches ASF DAAC for new GUNW/GOFF products, downloads anything not 
 ### Analyst dashboard
 
 ```bash
-gews dashboard -c config/nepal_2026.yaml --data-dir output --port 8080
+glews dashboard -c config/nepal_2026.yaml --data-dir output --port 8080
 ```
 
 Open `http://localhost:8080` to see flagged sites with severity levels, time-series plots, and cascade risk summaries. Analysts can classify flags as Watch / Warning / Cleared.
@@ -90,10 +90,10 @@ Open `http://localhost:8080` to see flagged sites with severity levels, time-ser
 ### Docker (fastest path)
 
 ```bash
-docker build -t gews .
+docker build -t glews .
 
 # Synthetic demo
-docker run --rm -v "$PWD/output:/app/output" gews demo --output /app/output
+docker run --rm -v "$PWD/output:/app/output" glews demo --output /app/output
 
 # Real monitoring
 docker run --rm \
@@ -101,7 +101,7 @@ docker run --rm \
     -v "$PWD/config:/app/config:ro" \
     -v "$PWD/data:/app/data" \
     -v "$PWD/output:/app/output" \
-    gews monitor -c config/global_watch.yaml --check-now
+    glews monitor -c config/global_watch.yaml --check-now
 ```
 
 ---
@@ -213,49 +213,49 @@ Sentinel-1 SLC data         NISAR GUNW / GOFF products
 
 | Command | Description |
 |---------|-------------|
-| `gews search` | Search ASF archive for Sentinel-1 scenes |
-| `gews download` | Download SLC scenes from ASF |
-| `gews process` | Run InSAR processing (ISCE-2 + MintPy) |
-| `gews detect` | Run Tier 0 anomaly detection |
-| `gews assess` | Run Tier 1 cascade risk assessment |
-| `gews report` | Generate analysis report |
-| `gews monitor` | Continuous monitoring for new NISAR data |
-| `gews dashboard` | Launch Tier 2 analyst review dashboard |
-| `gews map` | Launch interactive GeoJSON map viewer |
-| `gews demo` | Run full pipeline on synthetic data |
-| `gews train` | Train precursor classifier model |
-| `gews validate` | Validate a site configuration file |
-| `gews info` | Show system and dependency information |
-| `gews benchmark` | Run performance benchmarking suite |
-| `gews audit` | Run provenance audit on detection history |
-| `gews version` | Show GEWS version |
+| `glews search` | Search ASF archive for Sentinel-1 scenes |
+| `glews download` | Download SLC scenes from ASF |
+| `glews process` | Run InSAR processing (ISCE-2 + MintPy) |
+| `glews detect` | Run Tier 0 anomaly detection |
+| `glews assess` | Run Tier 1 cascade risk assessment |
+| `glews report` | Generate analysis report |
+| `glews monitor` | Continuous monitoring for new NISAR data |
+| `glews dashboard` | Launch Tier 2 analyst review dashboard |
+| `glews map` | Launch interactive GeoJSON map viewer |
+| `glews demo` | Run full pipeline on synthetic data |
+| `glews train` | Train precursor classifier model |
+| `glews validate` | Validate a site configuration file |
+| `glews info` | Show system and dependency information |
+| `glews benchmark` | Run performance benchmarking suite |
+| `glews audit` | Run provenance audit on detection history |
+| `glews version` | Show GLEWS version |
 
 ---
 
 ## Pipeline Stages
 
-### 1. Data acquisition (`gews search`, `gews download`)
+### 1. Data acquisition (`glews search`, `glews download`)
 
 Searches the ASF DAAC archive for Sentinel-1 SLC scenes covering a study area, selects the optimal orbital track (maximizing temporal sampling), and downloads scenes. Requires an [Earthdata Login](https://urs.earthdata.nasa.gov/) account.
 
 ```bash
-gews search --config config/nepal_2026.yaml
-gews download --config config/nepal_2026.yaml
+glews search --config config/nepal_2026.yaml
+glews download --config config/nepal_2026.yaml
 ```
 
-### 2. InSAR processing (`gews process`)
+### 2. InSAR processing (`glews process`)
 
 Wraps ISCE-2 (interferogram generation) and MintPy (time-series inversion) to produce displacement time series from the downloaded SLC data.
 
 **Prerequisites:** ISCE-2 and MintPy must be installed separately. See [ISCE-2](https://github.com/isce-framework/isce2) and [MintPy](https://github.com/insarlab/MintPy) documentation.
 
 ```bash
-gews process --config config/nepal_2026.yaml
-gews process --config config/nepal_2026.yaml --step prepare  # just generate configs
-gews process --config config/nepal_2026.yaml --dry-run       # print commands only
+glews process --config config/nepal_2026.yaml
+glews process --config config/nepal_2026.yaml --step prepare  # just generate configs
+glews process --config config/nepal_2026.yaml --dry-run       # print commands only
 ```
 
-### 3. Anomaly detection (`gews detect`)
+### 3. Anomaly detection (`glews detect`)
 
 The core analytical component. For each pixel:
 1. **Decomposes** the displacement time series into linear trend + seasonal harmonics + residual
@@ -284,7 +284,7 @@ Multi-sensor cross-check filters that eliminate false positives:
 - **Temporal consistency** — signal persistence across multiple SAR acquisitions
 - **Optical cross-check** — Sentinel-2 visible surface change (stub)
 
-### 6. Cascade risk assessment (`gews assess`)
+### 6. Cascade risk assessment (`glews assess`)
 
 Evaluates whether flagged sites can produce dangerous downstream cascades:
 - **Volume estimation** from deformation extent and slope geometry
@@ -304,13 +304,13 @@ DEM-derived geomorphological analysis:
 
 Reads NISAR L2 GUNW (unwrapped interferogram) and GOFF (pixel offset) HDF5 products via vectorized SBAS inversion. NISAR's L-band (24 cm) wavelength maintains coherence on glaciated surfaces where Sentinel-1's C-band (5.6 cm) decorrelates; GOFF extends coverage to meter-scale displacements.
 
-### 9. Operational monitoring (`gews monitor`)
+### 9. Operational monitoring (`glews monitor`)
 
 Turns the retrospective pipeline into a standing watch. Periodically searches ASF DAAC for new NISAR products, downloads new data, re-runs detection, and raises leveled alerts (`INFO`/`WARNING`/`CRITICAL`).
 
 ```bash
-gews monitor -c config/nepal_2026.yaml --check-now      # single site, one pass
-gews monitor -c config/global_watch.yaml --interval 6   # multi-site, every 6h
+glews monitor -c config/nepal_2026.yaml --check-now      # single site, one pass
+glews monitor -c config/global_watch.yaml --interval 6   # multi-site, every 6h
 ```
 
 ### 10. Tactical alert prioritization (`tactical.py`)
@@ -319,11 +319,11 @@ Prioritizes and routes alerts based on urgency, affected population, and respond
 
 ### 11. Provenance tracking (`provenance.py`)
 
-Records full audit trails for every detection run — input data hashes, configuration snapshots, software versions, and result checksums. Enables reproducibility and forensic review via `gews audit`.
+Records full audit trails for every detection run — input data hashes, configuration snapshots, software versions, and result checksums. Enables reproducibility and forensic review via `glews audit`.
 
 ### 12. Benchmarking (`benchmark.py`)
 
-Performance benchmarking suite for profiling detection pipeline throughput, memory usage, and scaling behavior across different scene sizes. Run via `gews benchmark`.
+Performance benchmarking suite for profiling detection pipeline throughput, memory usage, and scaling behavior across different scene sizes. Run via `glews benchmark`.
 
 ### 13. Alerting (`alerts.py`)
 
@@ -334,7 +334,7 @@ Multi-channel alert dispatch:
 
 Secrets use `${ENV_VAR}` expansion so credentials stay out of config files.
 
-### 14. Analyst dashboard (`gews dashboard`)
+### 14. Analyst dashboard (`glews dashboard`)
 
 Tier 2 review interface — a single-page web dashboard using Python's built-in `http.server`. Analysts review flagged sites by severity, inspect time-series plots, and classify flags as Watch / Warning / Cleared.
 
@@ -373,8 +373,8 @@ Production deployment options are documented in [docs/deployment.md](docs/deploy
 
 - **Docker / Docker Compose** — `docker compose up -d` starts monitor + dashboard
 - **Kubernetes** — Helm-style manifests in `deploy/kubernetes/`
-- **systemd** — unit file at `deploy/systemd/gews-monitor.service`
-- **cron** — periodic single-pass checks via `deploy/cron/gews-check.cron`
+- **systemd** — unit file at `deploy/systemd/glews-monitor.service`
+- **cron** — periodic single-pass checks via `deploy/cron/glews-check.cron`
 - **Monitoring** — Prometheus metrics and health checks in `deploy/monitoring/`
 
 Environment variables control all deployment configuration — see the [deployment guide](docs/deployment.md) for the full reference.
@@ -405,11 +405,11 @@ machine urs.earthdata.nasa.gov
 ```
 
 Additional data for full-pipeline runs:
-- **Sentinel-1 SLC** or **NISAR GUNW/GOFF** products — fetched via `gews search`/`gews download`/`gews monitor`
+- **Sentinel-1 SLC** or **NISAR GUNW/GOFF** products — fetched via `glews search`/`glews download`/`glews monitor`
 - **DEM** (for Tier 1 cascade assessment) — e.g. Copernicus GLO-30
 - **Population data** (optional) — e.g. WorldPop raster for exposure estimates
 
-The synthetic demo (`gews demo`) requires none of the above.
+The synthetic demo (`glews demo`) requires none of the above.
 
 ---
 

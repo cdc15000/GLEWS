@@ -3,13 +3,13 @@
 import numpy as np
 import pytest
 
-from gews.crosscheck import (
+from glews.crosscheck import (
     CrossCheckResult,
     InSARQualityChecker,
     OpticalCrossChecker,
     apply_tier1_filters,
 )
-from gews.detect import AnomalyFlag
+from glews.detect import AnomalyFlag
 
 
 # ---------------------------------------------------------------------------

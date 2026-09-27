@@ -5,7 +5,7 @@ import textwrap
 import pytest
 import yaml
 
-from gews.validate import validate_config, validate_config_file
+from glews.validate import validate_config, validate_config_file
 
 
 def _minimal_valid_config() -> dict:

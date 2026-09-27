@@ -23,9 +23,9 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from gews.nisar import load_nisar_goff_stack
-from gews.timeseries import compute_acceleration_map
-from gews.detect import detect_anomalies
+from glews.nisar import load_nisar_goff_stack
+from glews.timeseries import compute_acceleration_map
+from glews.detect import detect_anomalies
 
 DATA_DIR = Path(__file__).resolve().parent
 T138_DIR = DATA_DIR / "nisar" / "weisshorn" / "t138_d"
@@ -226,7 +226,7 @@ def main():
         print(f"  {label}: {r['n_flags']} flags, max disp = {r['max_displacement_mm']:.0f} mm")
 
     if total_flags > 0:
-        print(f"\n  ✅ GEWS DETECTS ANOMALOUS MOTION AT WEISSHORN")
+        print(f"\n  ✅ GLEWS DETECTS ANOMALOUS MOTION AT WEISSHORN")
         print(f"     This validates the pipeline on a second, independent site.")
     else:
         print(f"\n  ⚠️  No flags detected. Possible reasons:")

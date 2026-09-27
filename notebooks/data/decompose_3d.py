@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-from gews.nisar import load_nisar_goff_stack
+from glews.nisar import load_nisar_goff_stack
 
 # Site parameters
 SITE_E, SITE_N = 392042.0, 3119847.0

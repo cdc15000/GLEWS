@@ -3,7 +3,7 @@
     {
       "name": "DS_PROMETHEUS",
       "label": "Prometheus",
-      "description": "Prometheus data source for GEWS metrics",
+      "description": "Prometheus data source for GLEWS metrics",
       "type": "datasource",
       "pluginId": "prometheus",
       "pluginName": "Prometheus"
@@ -40,7 +40,7 @@
       },
       "targets": [
         {
-          "expr": "increase(gews_flags_raised_total[6h])",
+          "expr": "increase(glews_flags_raised_total[6h])",
           "legendFormat": "{{ site }}",
           "refId": "A"
         }
@@ -66,7 +66,7 @@
       },
       "targets": [
         {
-          "expr": "gews_monitor_run_duration_seconds",
+          "expr": "glews_monitor_run_duration_seconds",
           "legendFormat": "Run duration",
           "refId": "A"
         }
@@ -95,7 +95,7 @@
       },
       "targets": [
         {
-          "expr": "time() - gews_monitor_last_success_timestamp_seconds",
+          "expr": "time() - glews_monitor_last_success_timestamp_seconds",
           "legendFormat": "Age",
           "refId": "A"
         }
@@ -127,7 +127,7 @@
       },
       "targets": [
         {
-          "expr": "rate(gews_alerts_sent_total[1h])",
+          "expr": "rate(glews_alerts_sent_total[1h])",
           "legendFormat": "{{ channel }}",
           "refId": "A"
         }
@@ -151,7 +151,7 @@
       },
       "targets": [
         {
-          "expr": "gews_flags_active{severity=~\"critical|warning|info\"}",
+          "expr": "glews_flags_active{severity=~\"critical|warning|info\"}",
           "legendFormat": "{{ severity }}",
           "refId": "A"
         }
@@ -186,7 +186,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, rate(gews_dashboard_request_duration_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.95, rate(glews_dashboard_request_duration_seconds_bucket[5m]))",
           "legendFormat": "p95",
           "refId": "A"
         }
@@ -194,12 +194,12 @@
     }
   ],
   "schemaVersion": 39,
-  "tags": ["gews", "glacier", "monitoring"],
+  "tags": ["glews", "glacier", "monitoring"],
   "templating": { "list": [] },
   "time": { "from": "now-24h", "to": "now" },
   "timepicker": {},
   "timezone": "utc",
-  "title": "GEWS — Glacier Early Warning System",
-  "uid": "gews-overview",
+  "title": "GLEWS — Glacier Early Warning System",
+  "uid": "glews-overview",
   "version": 1
 }

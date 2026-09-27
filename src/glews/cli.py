@@ -2,17 +2,17 @@
 GEWS command-line interface.
 
 Usage:
-    gews search   --config CONFIG     Search for available Sentinel-1 scenes
-    gews download --config CONFIG     Download SLC scenes from ASF
-    gews process  --config CONFIG     Run InSAR processing (ISCE-2 + MintPy)
-    gews detect   --config CONFIG     Run Tier 0 anomaly detection
-    gews assess   --config CONFIG     Run Tier 1 cascade risk assessment
-    gews report   --config CONFIG     Generate analysis report
-    gews monitor  --config CONFIG     Continuous monitoring for new NISAR data
-    gews dashboard --config CONFIG    Launch Tier 2 analyst review dashboard
-    gews map       --data-dir DIR     Launch interactive GeoJSON map viewer
-    gews demo                         Run full pipeline on synthetic data
-    gews train                        Train precursor classifier model
+    glews search   --config CONFIG     Search for available Sentinel-1 scenes
+    glews download --config CONFIG     Download SLC scenes from ASF
+    glews process  --config CONFIG     Run InSAR processing (ISCE-2 + MintPy)
+    glews detect   --config CONFIG     Run Tier 0 anomaly detection
+    glews assess   --config CONFIG     Run Tier 1 cascade risk assessment
+    glews report   --config CONFIG     Generate analysis report
+    glews monitor  --config CONFIG     Continuous monitoring for new NISAR data
+    glews dashboard --config CONFIG    Launch Tier 2 analyst review dashboard
+    glews map       --data-dir DIR     Launch interactive GeoJSON map viewer
+    glews demo                         Run full pipeline on synthetic data
+    glews train                        Train precursor classifier model
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from pathlib import Path
 import click
 import yaml
 
-logger = logging.getLogger("gews")
+logger = logging.getLogger("glews")
 
 
 def _setup_logging(verbose: bool) -> None:
@@ -46,7 +46,7 @@ def _load_config(config_path: str) -> dict:
         config = yaml.safe_load(f)
 
     # Run validation and emit warnings (non-blocking)
-    from gews.validate import validate_config
+    from glews.validate import validate_config
 
     issues = validate_config(config) if isinstance(config, dict) else []
     for issue in issues:
@@ -75,8 +75,8 @@ def search(config: str, site: str | None) -> None:
     multi-site configs (e.g., hkh_priority.yaml, global_watch.yaml).
     Use --site to filter multi-site configs by name.
     """
-    from gews.acquire import search_scenes, select_track, summarize_scenes
-    from gews.monitor import iter_site_configs
+    from glews.acquire import search_scenes, select_track, summarize_scenes
+    from glews.monitor import iter_site_configs
 
     site_configs = list(iter_site_configs(config))
 
@@ -116,8 +116,8 @@ def download(config: str, site: str | None) -> None:
     Works with both single-site and multi-site configs.
     Use --site to filter by name.
     """
-    from gews.acquire import search_scenes, select_track, download_scenes
-    from gews.monitor import iter_site_configs
+    from glews.acquire import search_scenes, select_track, download_scenes
+    from glews.monitor import iter_site_configs
 
     site_configs = list(iter_site_configs(config))
     if site:
@@ -168,7 +168,7 @@ def download(config: str, site: str | None) -> None:
 )
 def process(config: str, dry_run: bool, step: str) -> None:
     """Run InSAR processing pipeline (ISCE-2 + MintPy)."""
-    from gews.process import InSARProcessor
+    from glews.process import InSARProcessor
 
     cfg = _load_config(config)
     proc = InSARProcessor(cfg)
@@ -192,9 +192,9 @@ def process(config: str, dry_run: bool, step: str) -> None:
 @click.option("--output", "-o", default="output", help="Output directory")
 def detect(config: str, output: str) -> None:
     """Run Tier 0 anomaly detection on processed InSAR data."""
-    from gews.detect import detect_anomalies
-    from gews.process import InSARProcessor
-    from gews.timeseries import compute_acceleration_map
+    from glews.detect import detect_anomalies
+    from glews.process import InSARProcessor
+    from glews.timeseries import compute_acceleration_map
 
     cfg = _load_config(config)
 
@@ -230,7 +230,7 @@ def detect(config: str, output: str) -> None:
 def assess(config: str) -> None:
     """Run Tier 1 cascade risk assessment."""
     click.echo("Tier 1 assessment requires DEM and population data.")
-    click.echo("Use 'gews demo' for a complete demonstration with synthetic data.")
+    click.echo("Use 'glews demo' for a complete demonstration with synthetic data.")
 
 
 @main.command()
@@ -248,10 +248,10 @@ def demo(output: str, no_plots: bool) -> None:
     This demonstrates the anomaly detection and cascade assessment
     algorithms on data mimicking the Nepal 2026 scenario.
     """
-    from gews.detect import detect_anomalies
-    from gews.report import generate_report
-    from gews.synthetic import generate_synthetic_scene
-    from gews.timeseries import compute_acceleration_map
+    from glews.detect import detect_anomalies
+    from glews.report import generate_report
+    from glews.synthetic import generate_synthetic_scene
+    from glews.timeseries import compute_acceleration_map
 
     click.echo("=" * 60)
     click.echo("GEWS Demo — Synthetic Nepal 2026 Scenario")
@@ -415,10 +415,10 @@ def monitor(config: str, interval: float | None, check_now: bool) -> None:
     or a multi-site YAML (with a 'sites' list and shared defaults).
 
     Examples:
-        gews monitor -c config/nepal_2026.yaml --check-now
-        gews monitor -c config/global_watch.yaml --interval 6
+        glews monitor -c config/nepal_2026.yaml --check-now
+        glews monitor -c config/global_watch.yaml --interval 6
     """
-    from gews.monitor import run_monitoring_loop, run_check_cycle, iter_site_configs
+    from glews.monitor import run_monitoring_loop, run_check_cycle, iter_site_configs
 
     # iter_site_configs and run_monitoring_loop take a file path,
     # not a loaded dict — they parse YAML internally.
@@ -457,7 +457,7 @@ def monitor(config: str, interval: float | None, check_now: bool) -> None:
 @click.option("--data-dir", default="output", help="Directory containing flags.geojson")
 def dashboard(config: str, port: int, data_dir: str) -> None:
     """Launch the Tier 2 analyst review dashboard."""
-    from gews.dashboard import serve
+    from glews.dashboard import serve
 
     cfg = _load_config(config)
     serve(data_dir=data_dir, port=port, config=cfg)
@@ -468,7 +468,7 @@ def dashboard(config: str, port: int, data_dir: str) -> None:
 @click.option("--port", default=8050, type=int, help="Port to serve on")
 def map_view(data_dir: str, port: int) -> None:
     """Launch an interactive map viewer for flagged sites."""
-    from gews.mapview import serve
+    from glews.mapview import serve
 
     serve(data_dir=data_dir, port=port)
 
@@ -477,7 +477,7 @@ def map_view(data_dir: str, port: int) -> None:
 @click.option("--config", "-c", required=True, help="Path to site config YAML")
 def validate(config: str) -> None:
     """Validate a configuration file and report errors/warnings."""
-    from gews.validate import validate_config_file
+    from glews.validate import validate_config_file
 
     cfg, issues = validate_config_file(config)
 
@@ -506,7 +506,7 @@ def info() -> None:
     """Show version, Python info, dependency status, and available configs."""
     import importlib
 
-    from gews import __version__
+    from glews import __version__
 
     click.echo(f"GEWS v{__version__}")
     click.echo(f"Python {sys.version}")
@@ -558,7 +558,7 @@ def info() -> None:
 @click.option("--lr", type=float, default=0.1, help="Learning rate")
 def train(output: str, seed: int, n_positive: int, n_negative: int, n_iter: int, lr: float) -> None:
     """Train the precursor classifier on synthetic landslide data."""
-    from gews.classifier import train_precursor_model
+    from glews.classifier import train_precursor_model
 
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -588,7 +588,7 @@ def train(output: str, seed: int, n_positive: int, n_negative: int, n_iter: int,
 @click.option("--quick", is_flag=True, help="Run quick benchmark only")
 def benchmark_cmd(quick: bool) -> None:
     """Run pipeline performance benchmarks."""
-    from gews.benchmark import PipelineBenchmark
+    from glews.benchmark import PipelineBenchmark
 
     bench = PipelineBenchmark()
 
@@ -616,7 +616,7 @@ def benchmark_cmd(quick: bool) -> None:
 @main.command()
 def version() -> None:
     """Show version information."""
-    from gews import __version__
+    from glews import __version__
 
     click.echo(f"GEWS v{__version__}")
     click.echo("Glacier Early Warning System — PoC InSAR Pipeline")
@@ -629,7 +629,7 @@ def version() -> None:
 @click.option("--audit-dir", default="data/audit", help="Alert audit log directory")
 def audit(site: str | None, since: str | None, provenance_dir: str, audit_dir: str) -> None:
     """Show provenance and alert audit trail."""
-    from gews.provenance import AlertAuditLog, ProvenanceTracker
+    from glews.provenance import AlertAuditLog, ProvenanceTracker
 
     tracker = ProvenanceTracker(log_dir=provenance_dir)
     audit_log = AlertAuditLog(log_dir=audit_dir)

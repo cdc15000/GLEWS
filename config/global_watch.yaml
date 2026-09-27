@@ -1,7 +1,7 @@
-# GEWS Multi-Site Operational Watch Configuration
+# GLEWS Multi-Site Operational Watch Configuration
 #
 # Defines known unstable-glacier / rock-slope sites to monitor
-# continuously via `gews monitor --config config/global_watch.yaml`.
+# continuously via `glews monitor --config config/global_watch.yaml`.
 #
 # ~45 sites worldwide including the HKH priority watchlist
 # (see config/hkh_priority.yaml for HKH-only monitoring).

@@ -1,4 +1,4 @@
-# Prometheus scrape configuration for GEWS
+# Prometheus scrape configuration for GLEWS
 # Add this to your prometheus.yml or mount as a separate scrape config file.
 
 global:
@@ -9,37 +9,37 @@ rule_files:
   - "alertmanager-rules.yaml"
 
 scrape_configs:
-  # GEWS dashboard metrics endpoint
-  - job_name: "gews-dashboard"
+  # GLEWS dashboard metrics endpoint
+  - job_name: "glews-dashboard"
     metrics_path: /metrics
     scrape_interval: 30s
     static_configs:
-      - targets: ["gews-dashboard:8080"]
+      - targets: ["glews-dashboard:8080"]
         labels:
-          app: gews
+          app: glews
           component: dashboard
 
     # For Kubernetes service discovery, replace static_configs above:
     # kubernetes_sd_configs:
     #   - role: endpoints
     #     namespaces:
-    #       names: ["gews"]
+    #       names: ["glews"]
     # relabel_configs:
     #   - source_labels: [__meta_kubernetes_service_name]
-    #     regex: gews-dashboard
+    #     regex: glews-dashboard
     #     action: keep
     #   - source_labels: [__meta_kubernetes_namespace]
     #     target_label: namespace
     #   - source_labels: [__meta_kubernetes_pod_name]
     #     target_label: pod
 
-  # GEWS monitor CronJob metrics (push gateway or job-level metrics)
-  - job_name: "gews-monitor"
+  # GLEWS monitor CronJob metrics (push gateway or job-level metrics)
+  - job_name: "glews-monitor"
     metrics_path: /metrics
     scrape_interval: 60s
     honor_labels: true
     static_configs:
       - targets: ["pushgateway:9091"]
         labels:
-          app: gews
+          app: glews
           component: monitor

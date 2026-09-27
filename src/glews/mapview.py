@@ -8,7 +8,7 @@ layer control, and auto-zoom to fit all markers.
 Uses only Python's built-in http.server — no additional dependencies.
 
 Usage (via CLI):
-    gews map --data-dir output --port 8050
+    glews map --data-dir output --port 8050
 """
 
 from __future__ import annotations

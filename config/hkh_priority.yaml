@@ -1,4 +1,4 @@
-# GEWS HKH Priority Watchlist — ~30 High-Risk Glacier Sites
+# GLEWS HKH Priority Watchlist — ~30 High-Risk Glacier Sites
 #
 # Hindu Kush–Himalaya (HKH) and adjacent Central Asian ranges (Pamir,
 # Tien Shan). These are the highest-priority glacier hazard sites in
@@ -8,7 +8,7 @@
 #   - active instability signals in recent satellite imagery
 #
 # Coordinates are WGS84 centroid of the hazard source zone.
-# Use with `gews monitor --config config/hkh_priority.yaml`.
+# Use with `glews monitor --config config/hkh_priority.yaml`.
 
 # -------------------------------------------------------------------
 # Shared defaults — see global_watch.yaml for full documentation

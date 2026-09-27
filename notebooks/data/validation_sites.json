@@ -1,7 +1,7 @@
 {
   "catalog_metadata": {
     "created": "2026-09-05",
-    "purpose": "Multi-site validation catalog for GEWS detection pipeline (SBAS inversion -> velocity-change detection -> 51-pixel median spatial detrending -> z-score normalization -> DBSCAN clustering)",
+    "purpose": "Multi-site validation catalog for GLEWS detection pipeline (SBAS inversion -> velocity-change detection -> 51-pixel median spatial detrending -> z-score normalization -> DBSCAN clustering)",
     "reference_validated_event": {
       "name": "Gyirong / Bhotekoshi-Lhende Khola rock-ice avalanche (Nepal-Tibet border)",
       "date": "2026-08-26",
@@ -127,7 +127,7 @@
         "checked_via": "asf_search platform=NISAR, POINT(-133.4022 57.9114), start=2025-01-01 end=2025-08-20 -> 0 results; unrestricted -> earliest product 2026-08-22",
         "notes": "Same pre-NISAR-coverage gap."
       },
-      "suitability": "borderline for THIS pipeline: this is a rock slope failure exposed by glacier retreat, not a glacier-ice collapse per se, but it is exactly the class of 'deglaciation-destabilized slope' GEWS aims to flag, and it has an unusually good precursor record (days of escalating microseismicity before failure)",
+      "suitability": "borderline for THIS pipeline: this is a rock slope failure exposed by glacier retreat, not a glacier-ice collapse per se, but it is exactly the class of 'deglaciation-destabilized slope' GLEWS aims to flag, and it has an unusually good precursor record (days of escalating microseismicity before failure)",
       "recommended_data_source": "ALOS-2 L-band ascending/descending over the Tracy Arm headwall; note Alaska has generally sparse ALOS-2 archive coverage compared to High Mountain Asia and the Alps, so archive availability should be checked before committing",
       "expected_challenges": [
         "No NISAR data",

@@ -1,10 +1,10 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: gews-dashboard
-  namespace: gews
+  name: glews-dashboard
+  namespace: glews
   labels:
-    app.kubernetes.io/name: gews
+    app.kubernetes.io/name: glews
     app.kubernetes.io/component: dashboard
   annotations:
     # --- TLS placeholder: uncomment and configure for your cert manager ---
@@ -16,16 +16,16 @@ spec:
   # --- TLS placeholder ---
   # tls:
   #   - hosts:
-  #       - gews.example.com
-  #     secretName: gews-tls
+  #       - glews.example.com
+  #     secretName: glews-tls
   rules:
-    - host: gews.example.com     # replace with your domain
+    - host: glews.example.com     # replace with your domain
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: gews-dashboard
+                name: glews-dashboard
                 port:
                   name: http

@@ -7,7 +7,7 @@ http.server module. No additional dependencies required beyond the
 Python standard library.
 
 Usage (via CLI):
-    gews dashboard -c config/nepal_2026.yaml --data-dir output --port 8080
+    glews dashboard -c config/nepal_2026.yaml --data-dir output --port 8080
 """
 
 from __future__ import annotations

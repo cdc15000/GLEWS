@@ -13,7 +13,7 @@ from typing import Any
 
 import yaml
 
-logger = logging.getLogger("gews")
+logger = logging.getLogger("glews")
 
 # ---------------------------------------------------------------------------
 # Schema definitions

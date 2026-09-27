@@ -1,4 +1,4 @@
-# GEWS Deployment Guide
+# GLEWS Deployment Guide
 
 ## Prerequisites
 
@@ -14,7 +14,7 @@
 ## Quick Start
 
 ```bash
-cd /path/to/gews
+cd /path/to/glews
 
 # Build the images
 docker compose build
@@ -35,16 +35,16 @@ your shell or placed in a `.env` file alongside `docker-compose.yml`.
 
 | Variable                | Default                      | Description                            |
 |------------------------|------------------------------|----------------------------------------|
-| `GEWS_CONFIG`          | `config/global_watch.yaml`   | Site config file (relative to /app)    |
-| `GEWS_INTERVAL`        | `6`                          | Check interval in hours                |
-| `GEWS_DASHBOARD_PORT`  | `8080`                       | Port the dashboard listens on          |
-| `GEWS_SMTP_HOST`       | *(empty)*                    | SMTP server for email alerts           |
-| `GEWS_SMTP_PORT`       | `587`                        | SMTP port                              |
-| `GEWS_SMTP_USER`       | *(empty)*                    | SMTP username                          |
-| `GEWS_SMTP_PASS`       | *(empty)*                    | SMTP password / app password           |
-| `GEWS_SMTP_TO`         | *(empty)*                    | Alert recipient email(s)               |
-| `GEWS_SLACK_WEBHOOK`   | *(empty)*                    | Slack incoming-webhook URL             |
-| `GEWS_WEBHOOK_URL`     | *(empty)*                    | Generic HTTP webhook for alerts        |
+| `GLEWS_CONFIG`          | `config/global_watch.yaml`   | Site config file (relative to /app)    |
+| `GLEWS_INTERVAL`        | `6`                          | Check interval in hours                |
+| `GLEWS_DASHBOARD_PORT`  | `8080`                       | Port the dashboard listens on          |
+| `GLEWS_SMTP_HOST`       | *(empty)*                    | SMTP server for email alerts           |
+| `GLEWS_SMTP_PORT`       | `587`                        | SMTP port                              |
+| `GLEWS_SMTP_USER`       | *(empty)*                    | SMTP username                          |
+| `GLEWS_SMTP_PASS`       | *(empty)*                    | SMTP password / app password           |
+| `GLEWS_SMTP_TO`         | *(empty)*                    | Alert recipient email(s)               |
+| `GLEWS_SLACK_WEBHOOK`   | *(empty)*                    | Slack incoming-webhook URL             |
+| `GLEWS_WEBHOOK_URL`     | *(empty)*                    | Generic HTTP webhook for alerts        |
 
 ### Using an Override File
 
@@ -61,15 +61,15 @@ merges it with the base file automatically.
 
 ### Email (SMTP)
 
-Set the `GEWS_SMTP_*` variables.  For Gmail, create an App Password
-(Account > Security > App Passwords) and use it as `GEWS_SMTP_PASS`:
+Set the `GLEWS_SMTP_*` variables.  For Gmail, create an App Password
+(Account > Security > App Passwords) and use it as `GLEWS_SMTP_PASS`:
 
 ```bash
-export GEWS_SMTP_HOST=smtp.gmail.com
-export GEWS_SMTP_PORT=587
-export GEWS_SMTP_USER=you@gmail.com
-export GEWS_SMTP_PASS=xxxx-xxxx-xxxx-xxxx
-export GEWS_SMTP_TO=team@example.com
+export GLEWS_SMTP_HOST=smtp.gmail.com
+export GLEWS_SMTP_PORT=587
+export GLEWS_SMTP_USER=you@gmail.com
+export GLEWS_SMTP_PASS=xxxx-xxxx-xxxx-xxxx
+export GLEWS_SMTP_TO=team@example.com
 ```
 
 ### Slack
@@ -78,18 +78,18 @@ Create an incoming webhook in your Slack workspace
 (<https://api.slack.com/messaging/webhooks>) and set:
 
 ```bash
-export GEWS_SLACK_WEBHOOK=https://hooks.slack.com/services/T00/B00/xxxx
+export GLEWS_SLACK_WEBHOOK=https://hooks.slack.com/services/T00/B00/xxxx
 ```
 
 ### Generic Webhook
 
-Point `GEWS_WEBHOOK_URL` at any HTTP endpoint.  GEWS POSTs a JSON payload
+Point `GLEWS_WEBHOOK_URL` at any HTTP endpoint.  GLEWS POSTs a JSON payload
 with alert details on each trigger.
 
 ## Monitoring Multiple Sites
 
 Use `config/global_watch.yaml` (the default) which defines a `sites` list.
-Add entries to that file, or point `GEWS_CONFIG` at your own multi-site YAML:
+Add entries to that file, or point `GLEWS_CONFIG` at your own multi-site YAML:
 
 ```yaml
 # my_watchlist.yaml
@@ -128,23 +128,23 @@ docker compose restart monitor
 docker compose build && docker compose up -d
 ```
 
-Data is persisted in Docker named volumes (`gews-data`, `gews-output`).
+Data is persisted in Docker named volumes (`glews-data`, `glews-output`).
 To inspect them directly:
 
 ```bash
-docker volume inspect gews_gews-output
+docker volume inspect glews_glews-output
 ```
 
 ## Running Without Docker
 
 ### systemd (Linux)
 
-A unit file is provided at `deploy/systemd/gews-monitor.service`.  Install it:
+A unit file is provided at `deploy/systemd/glews-monitor.service`.  Install it:
 
 ```bash
-sudo cp deploy/systemd/gews-monitor.service /etc/systemd/system/
+sudo cp deploy/systemd/glews-monitor.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now gews-monitor
+sudo systemctl enable --now glews-monitor
 ```
 
 Edit the unit file first to set `WorkingDirectory`, `User`, and the path to
@@ -152,10 +152,10 @@ your config.
 
 ### cron
 
-A crontab entry is provided at `deploy/cron/gews-check.cron`.  Install it:
+A crontab entry is provided at `deploy/cron/glews-check.cron`.  Install it:
 
 ```bash
-crontab -l | cat - deploy/cron/gews-check.cron | crontab -
+crontab -l | cat - deploy/cron/glews-check.cron | crontab -
 ```
 
 This runs a single check cycle every 6 hours rather than a persistent process.
@@ -204,8 +204,8 @@ The manifests include:
 - **Secrets** — all values are `CHANGEME` placeholders; use Sealed Secrets or
   an external secrets manager in production
 
-You will also need to create PersistentVolumeClaims (`gews-data`, `gews-output`)
-and a ConfigMap named `gews-site-config` containing your `global_watch.yaml`.
+You will also need to create PersistentVolumeClaims (`glews-data`, `glews-output`)
+and a ConfigMap named `glews-site-config` containing your `global_watch.yaml`.
 
 ## AWS ECS Fargate (Terraform)
 
@@ -237,8 +237,8 @@ Prometheus, Grafana, and Alertmanager configurations are in `deploy/monitoring/`
 Copy `alertmanager-rules.yaml` into your Prometheus rules directory (or
 reference it in `rule_files` in your `prometheus.yml`).  The rules fire for:
 
-- **GEWSPipelineFailure** (critical) — monitor exited with a non-zero code
-- **GEWSStaleData** (warning) — no successful run in 36 hours
-- **GEWSFlagSpike** (warning) — more than 10 flags raised in 6 hours
-- **GEWSDashboardDown** (critical) — dashboard unreachable
-- **GEWSDashboardHighLatency** (warning) — p95 response time exceeds 2 seconds
+- **GLEWSPipelineFailure** (critical) — monitor exited with a non-zero code
+- **GLEWSStaleData** (warning) — no successful run in 36 hours
+- **GLEWSFlagSpike** (warning) — more than 10 flags raised in 6 hours
+- **GLEWSDashboardDown** (critical) — dashboard unreachable
+- **GLEWSDashboardHighLatency** (warning) — p95 response time exceeds 2 seconds

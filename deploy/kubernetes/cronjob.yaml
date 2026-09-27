@@ -1,10 +1,10 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: gews-monitor
-  namespace: gews
+  name: glews-monitor
+  namespace: glews
   labels:
-    app.kubernetes.io/name: gews
+    app.kubernetes.io/name: glews
     app.kubernetes.io/component: monitor
 spec:
   schedule: "0 */6 * * *"   # every 6 hours
@@ -18,23 +18,23 @@ spec:
       template:
         metadata:
           labels:
-            app.kubernetes.io/name: gews
+            app.kubernetes.io/name: glews
             app.kubernetes.io/component: monitor
         spec:
           restartPolicy: OnFailure
           containers:
             - name: monitor
-              image: ghcr.io/gews-project/gews:latest  # replace with your registry
-              command: ["gews", "monitor"]
+              image: ghcr.io/glews-project/glews:latest  # replace with your registry
+              command: ["glews", "monitor"]
               args:
                 - "-c"
-                - "$(GEWS_CONFIG)"
+                - "$(GLEWS_CONFIG)"
                 - "--check-now"
               envFrom:
                 - configMapRef:
-                    name: gews-config
+                    name: glews-config
                 - secretRef:
-                    name: gews-secrets
+                    name: glews-secrets
               resources:
                 requests:
                   cpu: 500m
@@ -43,20 +43,20 @@ spec:
                   cpu: "2"
                   memory: 4Gi
               volumeMounts:
-                - name: gews-data
+                - name: glews-data
                   mountPath: /app/data
-                - name: gews-output
+                - name: glews-output
                   mountPath: /app/output
-                - name: gews-config-vol
+                - name: glews-config-vol
                   mountPath: /app/config
                   readOnly: true
           volumes:
-            - name: gews-data
+            - name: glews-data
               persistentVolumeClaim:
-                claimName: gews-data
-            - name: gews-output
+                claimName: glews-data
+            - name: glews-output
               persistentVolumeClaim:
-                claimName: gews-output
-            - name: gews-config-vol
+                claimName: glews-output
+            - name: glews-config-vol
               configMap:
-                name: gews-site-config
+                name: glews-site-config

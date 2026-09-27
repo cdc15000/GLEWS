@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from gews.cascade import (
+from glews.cascade import (
     CascadeAssessment,
     ExposureResult,
     RiskLevel,
@@ -15,7 +15,7 @@ from gews.cascade import (
     estimate_runout,
     generate_exposure_summary,
 )
-from gews.detect import AnomalyFlag
+from glews.detect import AnomalyFlag
 
 
 # ---------------------------------------------------------------------------

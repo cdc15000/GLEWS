@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from gews.classifier import (
+from glews.classifier import (
     FEATURE_NAMES,
     LandslideTrainingData,
     PrecursorClassifier,
@@ -355,12 +355,12 @@ class TestSigmoid:
 # ------------------------------------------------------------------ #
 
 class TestTrainCLI:
-    """Tests for the gews train CLI command."""
+    """Tests for the glews train CLI command."""
 
     def test_train_command_runs(self, tmp_path):
         """The train command should produce a model file."""
         from click.testing import CliRunner
-        from gews.cli import main
+        from glews.cli import main
 
         output = tmp_path / "model.json"
         runner = CliRunner()
@@ -380,7 +380,7 @@ class TestTrainCLI:
     def test_train_command_creates_directory(self, tmp_path):
         """The train command should create the output directory if needed."""
         from click.testing import CliRunner
-        from gews.cli import main
+        from glews.cli import main
 
         output = tmp_path / "subdir" / "model.json"
         runner = CliRunner()

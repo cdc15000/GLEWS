@@ -1,4 +1,4 @@
-"""Tests for the seismic/infrasound tactical warning module (gews.tactical).
+"""Tests for the seismic/infrasound tactical warning module (glews.tactical).
 
 Covers arrival-time computation with known distances, trigger evaluation
 logic, alert message generation, escalation with a mock dispatcher, and
@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from gews.tactical import (
+from glews.tactical import (
     ArrivalTimeEstimate,
     DownstreamCommunity,
     SeismicTrigger,

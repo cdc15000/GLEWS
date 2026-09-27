@@ -1,4 +1,4 @@
-"""Tests for gews.provenance — data provenance and audit logging."""
+"""Tests for glews.provenance — data provenance and audit logging."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from gews.provenance import AlertAuditLog, ProvenanceRecord, ProvenanceTracker
+from glews.provenance import AlertAuditLog, ProvenanceRecord, ProvenanceTracker
 
 
 # ---------------------------------------------------------------------------
@@ -415,15 +415,15 @@ class TestEdgeCases:
         assert len(tracker.query()) == 2
 
     def test_version_from_package(self, tmp_path):
-        """Records use the version from gews.__version__."""
-        from gews import __version__
+        """Records use the version from glews.__version__."""
+        from glews import __version__
 
         tracker = ProvenanceTracker(log_dir=tmp_path / "prov")
         rec = tracker.record("test", "S")
         assert rec.version == __version__
 
     def test_alert_audit_version(self, tmp_path):
-        from gews import __version__
+        from glews import __version__
 
         audit = AlertAuditLog(log_dir=tmp_path / "audit")
         entry = audit.log_alert("INFO", "S", "msg")

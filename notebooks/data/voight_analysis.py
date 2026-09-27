@@ -17,8 +17,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from gews.nisar import load_nisar_gunw_stack, load_nisar_goff_stack, NISARTimeseries
-from gews.timeseries import fit_voight
+from glews.nisar import load_nisar_gunw_stack, load_nisar_goff_stack, NISARTimeseries
+from glews.timeseries import fit_voight
 
 DATA_DIR = Path(__file__).resolve().parent
 GUNW_DIR = DATA_DIR / "nisar" / "gunw"

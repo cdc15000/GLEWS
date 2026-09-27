@@ -30,12 +30,12 @@ Design notes (read before touching the SBAS/z-score code paths):
     to a satellite download.
 
 Usage:
-    from gews.monitor import run_monitoring_loop
+    from glews.monitor import run_monitoring_loop
 
     run_monitoring_loop("config/global_watch.yaml", interval_hours=6)
 
     # or a single check-now pass:
-    from gews.monitor import MonitorState, check_new_data, process_new_acquisition
+    from glews.monitor import MonitorState, check_new_data, process_new_acquisition
 """
 
 from __future__ import annotations
@@ -178,7 +178,7 @@ def check_new_data(site_config: dict, state: MonitorState | None = None) -> list
 
     Returns
     -------
-    list[gews.acquire.SceneInfo]
+    list[glews.acquire.SceneInfo]
         Newly discovered products not present in state.known_products.
         Note: `known_products` is NOT updated here — callers decide
         when a product graduates from "seen" to "known" (typically
@@ -218,7 +218,7 @@ def check_new_data(site_config: dict, state: MonitorState | None = None) -> list
         start=search_start,
     )
 
-    from gews.acquire import SceneInfo
+    from glews.acquire import SceneInfo
 
     new_products = []
     for r in results:
@@ -244,7 +244,7 @@ def check_new_data(site_config: dict, state: MonitorState | None = None) -> list
 def _scene_from_nisar_result(result, granule: str):
     """Best-effort SceneInfo construction for NISAR products whose
     metadata schema differs slightly from Sentinel-1 SLC."""
-    from gews.acquire import SceneInfo
+    from glews.acquire import SceneInfo
 
     props = result.properties
 
@@ -303,10 +303,10 @@ def process_new_acquisition(
         'accel_map' : AccelerationMap | None
         'source' : "GUNW" | "GOFF" | None
     """
-    from gews.acquire import download_scenes
-    from gews.detect import detect_anomalies
-    from gews.nisar import load_nisar_goff_stack, load_nisar_gunw_stack
-    from gews.timeseries import compute_acceleration_map
+    from glews.acquire import download_scenes
+    from glews.detect import detect_anomalies
+    from glews.nisar import load_nisar_goff_stack, load_nisar_gunw_stack
+    from glews.timeseries import compute_acceleration_map
 
     acq = site_config.get("acquire", {})
     site_name = site_config["site"]["name"]
@@ -622,7 +622,7 @@ def run_check_cycle(site_config: dict) -> list[dict]:
 
     Returns the list of new alerts generated (may be empty).
     """
-    from gews.provenance import AlertAuditLog, ProvenanceTracker
+    from glews.provenance import AlertAuditLog, ProvenanceTracker
 
     site_name = site_config["site"]["name"]
     state_path = _state_path(site_config)
@@ -645,7 +645,7 @@ def run_check_cycle(site_config: dict) -> list[dict]:
                 # Dispatch alerts to configured notification channels
                 # (email, Slack, webhook).  If all channels fail for a given
                 # alert, remove its signature so the next cycle retries.
-                from gews.alerts import AlertDispatcher
+                from glews.alerts import AlertDispatcher
 
                 dispatcher = AlertDispatcher.from_config(site_config)
                 for alert in alerts:
@@ -715,7 +715,7 @@ def run_monitoring_loop(
         Hours to sleep between check cycles.
     check_now_only : bool
         If True, run exactly one cycle across all sites and return
-        (used by `gews monitor --check-now`).
+        (used by `glews monitor --check-now`).
     max_iterations : int or None
         Cap on loop iterations — for tests/diagnostics; None runs forever.
     _sleep_fn : callable

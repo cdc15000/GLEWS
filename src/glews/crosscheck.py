@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from scipy import ndimage
 
-from gews.detect import AnomalyFlag
+from glews.detect import AnomalyFlag
 
 logger = logging.getLogger(__name__)
 
@@ -342,7 +342,7 @@ def apply_tier1_filters(
     -----------
     Call from the CLI pipeline after Tier 0 detection::
 
-        from gews.crosscheck import apply_tier1_filters
+        from glews.crosscheck import apply_tier1_filters
 
         flags = detect_anomalies(accel_map, lat, lon, config,
                                  dates=dates, displacement=disp)
@@ -391,7 +391,7 @@ def apply_tier1_filters(
     # screen analysis once (scene-wide) and use results per flag.
     aps_result = None
     if dem is not None:
-        from gews.atmosphere import APSDetector
+        from glews.atmosphere import APSDetector
 
         try:
             detector = APSDetector()

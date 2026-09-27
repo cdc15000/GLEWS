@@ -18,9 +18,9 @@ from pathlib import Path
 
 import numpy as np
 
-from gews.cascade import CascadeAssessment, RiskLevel
-from gews.detect import AnomalyFlag
-from gews.timeseries import AccelerationMap
+from glews.cascade import CascadeAssessment, RiskLevel
+from glews.detect import AnomalyFlag
+from glews.timeseries import AccelerationMap
 
 logger = logging.getLogger(__name__)
 

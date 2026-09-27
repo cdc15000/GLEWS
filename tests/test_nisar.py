@@ -1,6 +1,6 @@
 """Tests for the NISAR data-loading module.
 
-These tests exercise the pure numerical helpers in gews.nisar (velocity
+These tests exercise the pure numerical helpers in glews.nisar (velocity
 estimation) without touching HDF5 I/O — the GUNW/GOFF file readers are
 not covered here since they require real NISAR product files.
 """
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from gews.nisar import NISARTimeseries, _compute_velocity
+from glews.nisar import NISARTimeseries, _compute_velocity
 
 
 class TestComputeVelocity:

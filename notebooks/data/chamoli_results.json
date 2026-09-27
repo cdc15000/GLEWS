@@ -406,10 +406,10 @@
       },
       "false_positive_note": "1 flag(s) near the site are noise (pre-onset or oversized clusters). At sigma=2.5, the detector produces 138 total flags across the scene, most of which are false positives."
     },
-    "would_gews_have_flagged": true,
+    "would_glews_have_flagged": true,
     "earliest_warning_days": 46.0,
     "how_many_days_before": 46.0,
-    "assessment_summary": "At sigma=2.0, GEWS detected the synthetic precursor signal in the acceleration phase (1 signal flag(s), 5 noise flag(s) near site). At sigma=2.5, GEWS detected it (1 signal flag(s))."
+    "assessment_summary": "At sigma=2.0, GLEWS detected the synthetic precursor signal in the acceleration phase (1 signal flag(s), 5 noise flag(s) near site). At sigma=2.5, GLEWS detected it (1 signal flag(s))."
   },
   "cascade_assessment": {
     "pipeline_assessments": [

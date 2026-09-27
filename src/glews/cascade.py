@@ -27,7 +27,7 @@ from typing import Any
 
 import numpy as np
 
-from gews.detect import AnomalyFlag
+from glews.detect import AnomalyFlag
 
 logger = logging.getLogger(__name__)
 

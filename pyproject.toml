@@ -3,13 +3,13 @@ requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "gews"
+name = "glews"
 version = "0.1.0"
-description = "Glacier Early Warning System — PoC InSAR pipeline for satellite detection of unstable glaciers"
+description = "Glacier and Landslide Early Warning System — PoC InSAR pipeline for satellite detection of unstable glaciers"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
-authors = [{name = "GEWS Project"}]
+authors = [{name = "GLEWS Project"}]
 
 dependencies = [
     "asf_search>=7.0",
@@ -36,7 +36,7 @@ dev = [
 ]
 
 [project.scripts]
-gews = "gews.cli:main"
+glews = "glews.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

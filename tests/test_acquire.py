@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from gews.acquire import (
+from glews.acquire import (
     SceneInfo,
     _create_session,
     _extract_file_size_mb,
@@ -182,7 +182,7 @@ class TestSceneInfoFromAsf:
 # ---------- search_scenes ----------
 
 class TestSearchScenes:
-    @patch("gews.acquire.asf")
+    @patch("glews.acquire.asf")
     def test_slc_default(self, mock_asf):
         import asf_search
         mock_asf.PLATFORM = asf_search.PLATFORM
@@ -201,7 +201,7 @@ class TestSearchScenes:
         call_kwargs = mock_asf.search.call_args[1]
         assert call_kwargs["processingLevel"] == asf_search.PRODUCT_TYPE.SLC
 
-    @patch("gews.acquire.asf")
+    @patch("glews.acquire.asf")
     def test_nisar_gunw_search(self, mock_asf):
         import asf_search
         mock_asf.PLATFORM = asf_search.PLATFORM
@@ -226,7 +226,7 @@ class TestSearchScenes:
         assert call_kwargs["processingLevel"] == asf_search.PRODUCT_TYPE.GUNW
         assert "platform" not in call_kwargs
 
-    @patch("gews.acquire.asf")
+    @patch("glews.acquire.asf")
     def test_multiple_product_types(self, mock_asf):
         import asf_search
         mock_asf.PLATFORM = asf_search.PLATFORM
@@ -291,7 +291,7 @@ class TestDownloadScenes:
             ),
         ]
 
-        with patch("gews.acquire.asf") as mock_asf:
+        with patch("glews.acquire.asf") as mock_asf:
             mock_asf.ASFSession.return_value = MagicMock()
             download_scenes(scenes, output_dir=tmp_path)
 
@@ -305,7 +305,7 @@ class TestDownloadScenes:
             _make_scene(url="https://example.com/S1-GUNW-test.nc"),
         ]
 
-        with patch("gews.acquire.asf") as mock_asf:
+        with patch("glews.acquire.asf") as mock_asf:
             mock_asf.ASFSession.return_value = MagicMock()
             download_scenes(scenes, output_dir=tmp_path)
             mock_asf.download_urls.assert_not_called()
@@ -316,7 +316,7 @@ class TestDownloadScenes:
 class TestCreateSession:
     @patch.dict("os.environ", {}, clear=True)
     def test_netrc_fallback(self):
-        with patch("gews.acquire.asf") as mock_asf:
+        with patch("glews.acquire.asf") as mock_asf:
             mock_session = MagicMock()
             mock_asf.ASFSession.return_value = mock_session
             session = _create_session()
@@ -324,14 +324,14 @@ class TestCreateSession:
 
     @patch.dict("os.environ", {"EARTHDATA_USER": "user", "EARTHDATA_PASS": "pass"})
     def test_env_vars(self):
-        with patch("gews.acquire.asf") as mock_asf:
+        with patch("glews.acquire.asf") as mock_asf:
             mock_session = MagicMock()
             mock_asf.ASFSession.return_value = mock_session
             session = _create_session()
             mock_session.auth_with_creds.assert_called_once_with("user", "pass")
 
     def test_explicit_creds(self):
-        with patch("gews.acquire.asf") as mock_asf:
+        with patch("glews.acquire.asf") as mock_asf:
             mock_session = MagicMock()
             mock_asf.ASFSession.return_value = mock_session
             session = _create_session(username="u", password="p")

@@ -8,7 +8,7 @@ import pytest
 
 def test_dashboard_module_imports():
     """The dashboard module and its key symbols are importable."""
-    from gews.dashboard import (
+    from glews.dashboard import (
         VALID_CLASSIFICATIONS,
         load_flags,
         load_state,
@@ -27,7 +27,7 @@ class TestLoadFlags:
 
     def test_load_from_geojson(self, tmp_path):
         """Flags load correctly from a flags.geojson file."""
-        from gews.dashboard import load_flags
+        from glews.dashboard import load_flags
 
         geojson = {
             "type": "FeatureCollection",
@@ -79,21 +79,21 @@ class TestLoadFlags:
 
     def test_load_empty_dir(self, tmp_path):
         """Returns empty list for a directory with no flag files."""
-        from gews.dashboard import load_flags
+        from glews.dashboard import load_flags
 
         flags = load_flags(tmp_path)
         assert flags == []
 
     def test_load_nonexistent_dir(self, tmp_path):
         """Returns empty list for a nonexistent directory."""
-        from gews.dashboard import load_flags
+        from glews.dashboard import load_flags
 
         flags = load_flags(tmp_path / "does_not_exist")
         assert flags == []
 
     def test_nan_acceleration_sanitized(self, tmp_path):
         """NaN acceleration values are sanitized to None for JSON safety."""
-        from gews.dashboard import load_flags
+        from glews.dashboard import load_flags
 
         geojson = {
             "type": "FeatureCollection",
@@ -131,7 +131,7 @@ class TestLoadFlags:
 
     def test_severity_from_risk_level(self, tmp_path):
         """Prefers risk_level from Tier 1 assessment when present."""
-        from gews.dashboard import load_flags
+        from glews.dashboard import load_flags
 
         geojson = {
             "type": "FeatureCollection",
@@ -154,7 +154,7 @@ class TestLoadFlags:
 
     def test_load_from_plain_json(self, tmp_path):
         """Falls back to flags.json when geojson is absent."""
-        from gews.dashboard import load_flags
+        from glews.dashboard import load_flags
 
         data = [
             {
@@ -177,7 +177,7 @@ class TestAnalystStatePersistence:
 
     def test_save_and_load(self, tmp_path):
         """State persists across save/load cycle."""
-        from gews.dashboard import load_state, save_state
+        from glews.dashboard import load_state, save_state
 
         state_path = tmp_path / "dashboard_state.json"
 
@@ -204,14 +204,14 @@ class TestAnalystStatePersistence:
 
     def test_load_missing_file(self, tmp_path):
         """Loading from a nonexistent file returns empty dict."""
-        from gews.dashboard import load_state
+        from glews.dashboard import load_state
 
         state = load_state(tmp_path / "nonexistent.json")
         assert state == {}
 
     def test_load_corrupted_file(self, tmp_path):
         """Loading from a corrupted file returns empty dict."""
-        from gews.dashboard import load_state
+        from glews.dashboard import load_state
 
         state_path = tmp_path / "dashboard_state.json"
         state_path.write_text("not valid json {{{")
@@ -221,7 +221,7 @@ class TestAnalystStatePersistence:
 
     def test_save_creates_parent_dirs(self, tmp_path):
         """save_state creates parent directories as needed."""
-        from gews.dashboard import load_state, save_state
+        from glews.dashboard import load_state, save_state
 
         state_path = tmp_path / "nested" / "dir" / "state.json"
         save_state(state_path, {"1": {"classification": "Watch"}})
@@ -231,7 +231,7 @@ class TestAnalystStatePersistence:
 
     def test_overwrite_preserves_other_entries(self, tmp_path):
         """Updating one flag's state does not lose other entries."""
-        from gews.dashboard import load_state, save_state
+        from glews.dashboard import load_state, save_state
 
         state_path = tmp_path / "dashboard_state.json"
 
@@ -256,7 +256,7 @@ class TestHandlerClassify:
 
     def test_classify_valid(self, tmp_path):
         """A valid classification request updates state and returns the entry."""
-        from gews.dashboard import load_state, make_handler, save_state
+        from glews.dashboard import load_state, make_handler, save_state
 
         import io
         from http.server import BaseHTTPRequestHandler
@@ -296,7 +296,7 @@ class TestHandlerClassify:
 
     def test_invalid_classification_rejected(self):
         """Classifications not in the allowlist should be rejected."""
-        from gews.dashboard import VALID_CLASSIFICATIONS
+        from glews.dashboard import VALID_CLASSIFICATIONS
 
         assert "InvalidStatus" not in VALID_CLASSIFICATIONS
         assert "Watch" in VALID_CLASSIFICATIONS
@@ -309,7 +309,7 @@ class TestTimeseriesInGeojson:
 
     def test_load_flags_preserves_timeseries(self, tmp_path):
         """Timeseries data in geojson survives load_flags and sanitization."""
-        from gews.dashboard import load_flags
+        from glews.dashboard import load_flags
 
         ts = {"dates": ["2026-01-01", "2026-01-13"], "values": [0.0, 0.0023]}
         geojson = {
@@ -337,8 +337,8 @@ class TestTimeseriesInGeojson:
         """_export_geojson writes timeseries when present on flag."""
         import numpy as np
 
-        from gews.detect import AnomalyFlag
-        from gews.report import _export_geojson
+        from glews.detect import AnomalyFlag
+        from glews.report import _export_geojson
 
         flag = AnomalyFlag(
             flag_id=0,
@@ -377,8 +377,8 @@ class TestTimeseriesInGeojson:
         """_export_geojson does not include timeseries key when flag has None."""
         import numpy as np
 
-        from gews.detect import AnomalyFlag
-        from gews.report import _export_geojson
+        from glews.detect import AnomalyFlag
+        from glews.report import _export_geojson
 
         flag = AnomalyFlag(
             flag_id=0,

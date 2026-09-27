@@ -6,7 +6,7 @@ This is a SYNTHETIC RETROSPECTIVE validation: NISAR was not operational
 in 2016, so no real InSAR displacement data exist for this event.
 Instead, we construct synthetic displacement time series based on
 published literature values for pre-collapse velocity changes, then
-run the GEWS detection pipeline to evaluate whether the system would
+run the GLEWS detection pipeline to evaluate whether the system would
 have detected the precursory acceleration in time.
 
 Events:
@@ -46,15 +46,15 @@ from scipy.ndimage import gaussian_filter
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from gews.timeseries import (
+from glews.timeseries import (
     AccelerationMap,
     compute_acceleration_map,
     bocpd_changepoints,
     detect_step_changes,
     fit_voight,
 )
-from gews.detect import detect_anomalies, AnomalyFlag
-from gews.cascade import (
+from glews.detect import detect_anomalies, AnomalyFlag
+from glews.cascade import (
     assess_cascade_risk,
     estimate_runout,
     estimate_exposure,
@@ -737,7 +737,7 @@ def main():
                   f"volume={top['estimated_volume_m3']:,.0f} m3, "
                   f"runout={top['runout_distance_km']:.1f} km")
 
-    # Assessment of GEWS capability
+    # Assessment of GLEWS capability
     detected_aru1 = bool(
         results["collapses"]["aru_1"]["detection_results"]
         ["acceleration_zscore"]["n_flags"]
@@ -750,20 +750,20 @@ def main():
     if detected_aru1 and detected_aru2:
         verdict = "PASS"
         verdict_detail = (
-            "GEWS detection pipeline successfully identified precursory "
+            "GLEWS detection pipeline successfully identified precursory "
             "acceleration in synthetic data matching the Aru collapse "
             "observations for both events."
         )
     elif detected_aru1 or detected_aru2:
         verdict = "PARTIAL"
         verdict_detail = (
-            "GEWS detection pipeline detected precursory acceleration for "
+            "GLEWS detection pipeline detected precursory acceleration for "
             "one of the two collapses. Further tuning may improve sensitivity."
         )
     else:
         verdict = "FAIL"
         verdict_detail = (
-            "GEWS detection pipeline did not flag the synthetic precursory "
+            "GLEWS detection pipeline did not flag the synthetic precursory "
             "signals. Detection thresholds may need adjustment for this "
             "failure mode (low-angle glacier surge)."
         )

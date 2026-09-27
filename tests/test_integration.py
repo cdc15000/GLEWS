@@ -12,12 +12,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from gews.alerts import AlertDispatcher
-from gews.dashboard import load_flags
-from gews.detect import AnomalyFlag, detect_anomalies
-from gews.report import generate_report
-from gews.synthetic import SyntheticConfig, generate_synthetic_scene
-from gews.timeseries import (
+from glews.alerts import AlertDispatcher
+from glews.dashboard import load_flags
+from glews.detect import AnomalyFlag, detect_anomalies
+from glews.report import generate_report
+from glews.synthetic import SyntheticConfig, generate_synthetic_scene
+from glews.timeseries import (
     AccelerationMap,
     compute_acceleration_map,
     detect_step_changes,

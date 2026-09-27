@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from gews.atmosphere import APSDetector, APSResult
+from glews.atmosphere import APSDetector, APSResult
 
 
 # ---------------------------------------------------------------------------

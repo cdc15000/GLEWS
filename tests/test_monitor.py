@@ -1,6 +1,6 @@
 """Tests for the operational monitoring module.
 
-Covers the pure/config-driven pieces of gews.monitor — config fan-out,
+Covers the pure/config-driven pieces of glews.monitor — config fan-out,
 state (de)serialization, and alert construction — without touching
 ASF search, downloads, or the NISAR/detection pipeline.
 """
@@ -13,8 +13,8 @@ import numpy as np
 import pytest
 import yaml
 
-from gews.detect import AnomalyFlag
-from gews.monitor import (
+from glews.detect import AnomalyFlag
+from glews.monitor import (
     DEFAULT_ALERT_LEVELS,
     MonitorState,
     build_alerts,

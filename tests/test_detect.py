@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from gews.detect import AnomalyFlag, detect_anomalies
-from gews.timeseries import AccelerationMap
+from glews.detect import AnomalyFlag, detect_anomalies
+from glews.timeseries import AccelerationMap
 
 
 def _make_accel_map(

@@ -10,7 +10,7 @@ Supports:
     - ARIA S1 GUNW (pre-processed Sentinel-1 interferograms)
 
 Usage:
-    from gews.acquire import search_scenes, select_track, download_scenes
+    from glews.acquire import search_scenes, select_track, download_scenes
 
     scenes = search_scenes(config)
     track_scenes = select_track(scenes)

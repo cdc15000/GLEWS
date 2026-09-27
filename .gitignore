@@ -10,10 +10,10 @@ build/
 # Virtual environments
 .venv/
 venv/
-gews/lib/
-gews/bin/
-gews/include/
-gews/pyvenv.cfg
+glews/lib/
+glews/bin/
+glews/include/
+glews/pyvenv.cfg
 
 # Data — large satellite products
 notebooks/data/nisar/
@@ -43,4 +43,4 @@ notebooks/output/
 # Monitor state (runtime-generated)
 data/monitor_state/
 .claude/worktrees/
-/gews/
+/glews/

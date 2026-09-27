@@ -1,6 +1,6 @@
 # Glacier Early Warning System — Deployment Guide
 
-Production deployment options for the GEWS monitoring pipeline and analyst dashboard.
+Production deployment options for the GLEWS monitoring pipeline and analyst dashboard.
 
 ---
 
@@ -19,14 +19,14 @@ Production deployment options for the GEWS monitoring pipeline and analyst dashb
 
 ## Docker Quickstart
 
-Build the GEWS image and run the synthetic demo to verify the installation:
+Build the GLEWS image and run the synthetic demo to verify the installation:
 
 ```bash
 # Build
-docker build -t gews .
+docker build -t glews .
 
 # Verify with the synthetic demo (no credentials needed)
-docker run --rm -v "$PWD/output:/app/output" gews demo --output /app/output
+docker run --rm -v "$PWD/output:/app/output" glews demo --output /app/output
 
 # Run a single monitoring check against real data
 docker run --rm \
@@ -34,10 +34,10 @@ docker run --rm \
     -v "$PWD/config:/app/config:ro" \
     -v "$PWD/data:/app/data" \
     -v "$PWD/output:/app/output" \
-    gews monitor -c config/global_watch.yaml --check-now
+    glews monitor -c config/global_watch.yaml --check-now
 ```
 
-The image's `ENTRYPOINT` is the `gews` CLI, so any subcommand follows `docker run --rm gews ...` directly.
+The image's `ENTRYPOINT` is the `glews` CLI, so any subcommand follows `docker run --rm glews ...` directly.
 
 ---
 
@@ -46,7 +46,7 @@ The image's `ENTRYPOINT` is the `gews` CLI, so any subcommand follows `docker ru
 The recommended deployment for most installations. Starts both the monitoring loop and the analyst dashboard as long-running services.
 
 ```bash
-cd /path/to/gews
+cd /path/to/glews
 
 # Build images
 docker compose build
@@ -61,7 +61,7 @@ docker compose logs -f monitor
 docker compose down
 ```
 
-The dashboard is available at `http://localhost:8080` by default (configurable via `GEWS_DASHBOARD_PORT`).
+The dashboard is available at `http://localhost:8080` by default (configurable via `GLEWS_DASHBOARD_PORT`).
 
 ### docker-compose.yml overview
 
@@ -69,27 +69,27 @@ The dashboard is available at `http://localhost:8080` by default (configurable v
 services:
   monitor:
     build: .
-    command: monitor -c ${GEWS_CONFIG:-config/global_watch.yaml} --interval ${GEWS_INTERVAL:-6}
+    command: monitor -c ${GLEWS_CONFIG:-config/global_watch.yaml} --interval ${GLEWS_INTERVAL:-6}
     volumes:
       - ${HOME}/.netrc:/root/.netrc:ro
       - ./config:/app/config:ro
       - ./data:/app/data
       - ./output:/app/output
     environment:
-      - GEWS_SMTP_HOST
-      - GEWS_SMTP_PORT
-      - GEWS_SMTP_USER
-      - GEWS_SMTP_PASS
-      - GEWS_SMTP_TO
-      - GEWS_SLACK_WEBHOOK
-      - GEWS_WEBHOOK_URL
+      - GLEWS_SMTP_HOST
+      - GLEWS_SMTP_PORT
+      - GLEWS_SMTP_USER
+      - GLEWS_SMTP_PASS
+      - GLEWS_SMTP_TO
+      - GLEWS_SLACK_WEBHOOK
+      - GLEWS_WEBHOOK_URL
     restart: unless-stopped
 
   dashboard:
     build: .
-    command: dashboard -c ${GEWS_CONFIG:-config/global_watch.yaml} --data-dir /app/output --port 8080
+    command: dashboard -c ${GLEWS_CONFIG:-config/global_watch.yaml} --data-dir /app/output --port 8080
     ports:
-      - "${GEWS_DASHBOARD_PORT:-8080}:8080"
+      - "${GLEWS_DASHBOARD_PORT:-8080}:8080"
     volumes:
       - ./config:/app/config:ro
       - ./output:/app/output:ro
@@ -117,35 +117,35 @@ All deployment settings are controlled via environment variables, either exporte
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GEWS_CONFIG` | `config/global_watch.yaml` | Site config file (relative to /app) |
-| `GEWS_INTERVAL` | `6` | Check interval in hours |
-| `GEWS_DASHBOARD_PORT` | `8080` | Dashboard listen port |
+| `GLEWS_CONFIG` | `config/global_watch.yaml` | Site config file (relative to /app) |
+| `GLEWS_INTERVAL` | `6` | Check interval in hours |
+| `GLEWS_DASHBOARD_PORT` | `8080` | Dashboard listen port |
 
 ### Email alerts (SMTP)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GEWS_SMTP_HOST` | *(empty)* | SMTP server hostname |
-| `GEWS_SMTP_PORT` | `587` | SMTP port (587 for STARTTLS) |
-| `GEWS_SMTP_USER` | *(empty)* | SMTP username |
-| `GEWS_SMTP_PASS` | *(empty)* | SMTP password or app password |
-| `GEWS_SMTP_TO` | *(empty)* | Alert recipient email(s), comma-separated |
+| `GLEWS_SMTP_HOST` | *(empty)* | SMTP server hostname |
+| `GLEWS_SMTP_PORT` | `587` | SMTP port (587 for STARTTLS) |
+| `GLEWS_SMTP_USER` | *(empty)* | SMTP username |
+| `GLEWS_SMTP_PASS` | *(empty)* | SMTP password or app password |
+| `GLEWS_SMTP_TO` | *(empty)* | Alert recipient email(s), comma-separated |
 
-For Gmail, create an App Password (Account > Security > App Passwords) and use it as `GEWS_SMTP_PASS`:
+For Gmail, create an App Password (Account > Security > App Passwords) and use it as `GLEWS_SMTP_PASS`:
 
 ```bash
-export GEWS_SMTP_HOST=smtp.gmail.com
-export GEWS_SMTP_PORT=587
-export GEWS_SMTP_USER=you@gmail.com
-export GEWS_SMTP_PASS=xxxx-xxxx-xxxx-xxxx
-export GEWS_SMTP_TO=team@example.com
+export GLEWS_SMTP_HOST=smtp.gmail.com
+export GLEWS_SMTP_PORT=587
+export GLEWS_SMTP_USER=you@gmail.com
+export GLEWS_SMTP_PASS=xxxx-xxxx-xxxx-xxxx
+export GLEWS_SMTP_TO=team@example.com
 ```
 
 ### Slack alerts
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GEWS_SLACK_WEBHOOK` | *(empty)* | Slack incoming-webhook URL |
+| `GLEWS_SLACK_WEBHOOK` | *(empty)* | Slack incoming-webhook URL |
 
 Create an incoming webhook at <https://api.slack.com/messaging/webhooks>.
 
@@ -153,7 +153,7 @@ Create an incoming webhook at <https://api.slack.com/messaging/webhooks>.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GEWS_WEBHOOK_URL` | *(empty)* | HTTP endpoint for JSON POST alerts |
+| `GLEWS_WEBHOOK_URL` | *(empty)* | HTTP endpoint for JSON POST alerts |
 
 Alert payloads are JSON objects with `level`, `site`, `summary`, `details`, and `timestamp` fields.
 
@@ -167,36 +167,36 @@ Kubernetes manifests are provided in `deploy/kubernetes/`. These define a CronJo
 
 ```bash
 # Create namespace
-kubectl create namespace gews
+kubectl create namespace glews
 
 # Create secrets for Earthdata and alert credentials
-kubectl -n gews create secret generic gews-earthdata \
+kubectl -n glews create secret generic glews-earthdata \
     --from-file=netrc=$HOME/.netrc
 
-kubectl -n gews create secret generic gews-alerts \
-    --from-literal=GEWS_SMTP_HOST=smtp.gmail.com \
-    --from-literal=GEWS_SMTP_PORT=587 \
-    --from-literal=GEWS_SMTP_USER=you@gmail.com \
-    --from-literal=GEWS_SMTP_PASS=xxxx-xxxx-xxxx-xxxx \
-    --from-literal=GEWS_SMTP_TO=team@example.com \
-    --from-literal=GEWS_SLACK_WEBHOOK=https://hooks.slack.com/...
+kubectl -n glews create secret generic glews-alerts \
+    --from-literal=GLEWS_SMTP_HOST=smtp.gmail.com \
+    --from-literal=GLEWS_SMTP_PORT=587 \
+    --from-literal=GLEWS_SMTP_USER=you@gmail.com \
+    --from-literal=GLEWS_SMTP_PASS=xxxx-xxxx-xxxx-xxxx \
+    --from-literal=GLEWS_SMTP_TO=team@example.com \
+    --from-literal=GLEWS_SLACK_WEBHOOK=https://hooks.slack.com/...
 
 # Create config map from your site config
-kubectl -n gews create configmap gews-config \
+kubectl -n glews create configmap glews-config \
     --from-file=global_watch.yaml=config/global_watch.yaml
 
 # Apply manifests
-kubectl -n gews apply -f deploy/kubernetes/
+kubectl -n glews apply -f deploy/kubernetes/
 
 # Check status
-kubectl -n gews get cronjobs,deployments,pods
+kubectl -n glews get cronjobs,deployments,pods
 ```
 
 ### Key resources
 
-- **CronJob `gews-monitor`** — runs `gews monitor --check-now` every 6 hours (configurable via the schedule field). Uses a PersistentVolumeClaim for data and output directories so state persists across runs.
-- **Deployment `gews-dashboard`** — serves the analyst dashboard. Reads from the same output PVC.
-- **PersistentVolumeClaim `gews-data`** — shared storage for downloaded products, monitor state, and detection output.
+- **CronJob `glews-monitor`** — runs `glews monitor --check-now` every 6 hours (configurable via the schedule field). Uses a PersistentVolumeClaim for data and output directories so state persists across runs.
+- **Deployment `glews-dashboard`** — serves the analyst dashboard. Reads from the same output PVC.
+- **PersistentVolumeClaim `glews-data`** — shared storage for downloaded products, monitor state, and detection output.
 
 ### Scaling considerations
 
@@ -208,57 +208,57 @@ kubectl -n gews get cronjobs,deployments,pods
 
 ## systemd
 
-A systemd unit file is provided at `deploy/systemd/gews-monitor.service` for running the Glacier Early Warning System monitor as a Linux service.
+A systemd unit file is provided at `deploy/systemd/glews-monitor.service` for running the Glacier Early Warning System monitor as a Linux service.
 
 ### Installation
 
 ```bash
 # Copy the unit file
-sudo cp deploy/systemd/gews-monitor.service /etc/systemd/system/
+sudo cp deploy/systemd/glews-monitor.service /etc/systemd/system/
 
 # Edit to set your paths and environment
-sudo systemctl edit gews-monitor.service
+sudo systemctl edit glews-monitor.service
 
 # Reload, enable, and start
 sudo systemctl daemon-reload
-sudo systemctl enable gews-monitor.service
-sudo systemctl start gews-monitor.service
+sudo systemctl enable glews-monitor.service
+sudo systemctl start glews-monitor.service
 
 # Check status and logs
-sudo systemctl status gews-monitor.service
-journalctl -u gews-monitor.service -f
+sudo systemctl status glews-monitor.service
+journalctl -u glews-monitor.service -f
 ```
 
 ### Unit file overview
 
 ```ini
 [Unit]
-Description=GEWS Glacier Early Warning System Monitor
+Description=GLEWS Glacier Early Warning System Monitor
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=gews
-WorkingDirectory=/opt/gews
-ExecStart=/opt/gews/.venv/bin/gews monitor -c config/global_watch.yaml --interval 6
+User=glews
+WorkingDirectory=/opt/glews
+ExecStart=/opt/glews/.venv/bin/glews monitor -c config/global_watch.yaml --interval 6
 Restart=on-failure
 RestartSec=60
-EnvironmentFile=/opt/gews/.env
+EnvironmentFile=/opt/glews/.env
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-Place alert credentials in `/opt/gews/.env` (permissions `600`):
+Place alert credentials in `/opt/glews/.env` (permissions `600`):
 
 ```bash
-GEWS_SMTP_HOST=smtp.gmail.com
-GEWS_SMTP_PORT=587
-GEWS_SMTP_USER=you@gmail.com
-GEWS_SMTP_PASS=xxxx-xxxx-xxxx-xxxx
-GEWS_SMTP_TO=team@example.com
-GEWS_SLACK_WEBHOOK=https://hooks.slack.com/...
+GLEWS_SMTP_HOST=smtp.gmail.com
+GLEWS_SMTP_PORT=587
+GLEWS_SMTP_USER=you@gmail.com
+GLEWS_SMTP_PASS=xxxx-xxxx-xxxx-xxxx
+GLEWS_SMTP_TO=team@example.com
+GLEWS_SLACK_WEBHOOK=https://hooks.slack.com/...
 ```
 
 ---
@@ -271,7 +271,7 @@ For environments where a persistent daemon is not desired, a crontab entry runs 
 
 ```bash
 # Install from the provided crontab fragment
-crontab -l | cat - deploy/cron/gews-check.cron | crontab -
+crontab -l | cat - deploy/cron/glews-check.cron | crontab -
 
 # Or add manually (every 6 hours):
 crontab -e
@@ -280,8 +280,8 @@ crontab -e
 ### Crontab entry
 
 ```
-# GEWS monitoring check — every 6 hours
-0 */6 * * * cd /opt/gews && /opt/gews/.venv/bin/gews monitor -c config/global_watch.yaml --check-now >> /var/log/gews/monitor.log 2>&1
+# GLEWS monitoring check — every 6 hours
+0 */6 * * * cd /opt/glews && /opt/glews/.venv/bin/glews monitor -c config/global_watch.yaml --check-now >> /var/log/glews/monitor.log 2>&1
 ```
 
 The `--check-now` flag runs a single check cycle and exits. State is checkpointed to `data/monitor_state/`, so each run resumes from where the previous one left off.
@@ -289,8 +289,8 @@ The `--check-now` flag runs a single check cycle and exits. State is checkpointe
 ### Log rotation
 
 ```bash
-# /etc/logrotate.d/gews
-/var/log/gews/*.log {
+# /etc/logrotate.d/glews
+/var/log/glews/*.log {
     weekly
     rotate 12
     compress
@@ -324,11 +324,11 @@ If Prometheus scraping is configured, key metrics to watch:
 
 | Metric | Description |
 |--------|-------------|
-| `gews_check_cycle_duration_seconds` | Time for a complete check cycle |
-| `gews_products_downloaded_total` | Cumulative NISAR products downloaded |
-| `gews_anomaly_flags_total` | Total anomaly flags raised |
-| `gews_alerts_dispatched_total` | Alerts sent (by channel and level) |
-| `gews_check_cycle_errors_total` | Failed check cycles |
+| `glews_check_cycle_duration_seconds` | Time for a complete check cycle |
+| `glews_products_downloaded_total` | Cumulative NISAR products downloaded |
+| `glews_anomaly_flags_total` | Total anomaly flags raised |
+| `glews_alerts_dispatched_total` | Alerts sent (by channel and level) |
+| `glews_check_cycle_errors_total` | Failed check cycles |
 
 ### Alerting on the alerter
 

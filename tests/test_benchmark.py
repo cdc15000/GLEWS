@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from gews.benchmark import BenchmarkResult, PipelineBenchmark, _make_synthetic_cube
+from glews.benchmark import BenchmarkResult, PipelineBenchmark, _make_synthetic_cube
 
 
 class TestBenchmarkResult:

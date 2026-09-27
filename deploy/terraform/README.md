@@ -1,4 +1,4 @@
-# GEWS Terraform — AWS ECS Fargate
+# GLEWS Terraform — AWS ECS Fargate
 
 Deploy the Glacier Early Warning System on AWS using ECS Fargate.
 
@@ -17,7 +17,7 @@ Deploy the Glacier Early Warning System on AWS using ECS Fargate.
 2. A VPC with at least two public and two private subnets.
 3. Earthdata credentials stored in **AWS Secrets Manager** (one secret per
    value — pass their ARNs via `earthdata_user_arn` / `earthdata_pass_arn`).
-4. The GEWS container image pushed to a registry reachable from ECS
+4. The GLEWS container image pushed to a registry reachable from ECS
    (ECR, GHCR, Docker Hub, etc.).
 5. (Optional) An ACM certificate for TLS termination on the ALB.
 
@@ -34,9 +34,9 @@ aws_region         = "us-east-1"
 vpc_id             = "vpc-0abc123..."
 private_subnet_ids = ["subnet-aaa", "subnet-bbb"]
 public_subnet_ids  = ["subnet-ccc", "subnet-ddd"]
-earthdata_user_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:gews/earthdata-user-XyZ"
-earthdata_pass_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:gews/earthdata-pass-AbC"
-container_image    = "123456789012.dkr.ecr.us-east-1.amazonaws.com/gews:latest"
+earthdata_user_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:glews/earthdata-user-XyZ"
+earthdata_pass_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:glews/earthdata-pass-AbC"
+container_image    = "123456789012.dkr.ecr.us-east-1.amazonaws.com/glews:latest"
 EOF
 
 terraform plan  -var-file=prod.tfvars
@@ -66,4 +66,4 @@ terraform destroy -var-file=prod.tfvars
 ```
 
 > **Note:** The EFS file system contains pipeline data. Terraform will
-> destroy it. Back up `/gews-data` and `/gews-output` first if needed.
+> destroy it. Back up `/glews-data` and `/glews-output` first if needed.

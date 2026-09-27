@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from gews.nisar import NISARTimeseries
+from glews.nisar import NISARTimeseries
 
 
 @pytest.fixture
@@ -50,7 +50,7 @@ def synthetic_nisar_timeseries(small_dates, small_displacement):
     lat = np.linspace(28.3, 28.1, n_rows)[:, None] * np.ones(n_cols)
     lon = np.ones(n_rows)[:, None] * np.linspace(85.8, 86.0, n_cols)
 
-    from gews.nisar import _compute_velocity
+    from glews.nisar import _compute_velocity
 
     velocity = _compute_velocity(small_dates, small_displacement)
     coherence = np.full((n_rows, n_cols), 0.8, dtype=np.float32)

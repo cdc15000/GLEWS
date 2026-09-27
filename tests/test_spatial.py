@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from gews.spatial import (
+from glews.spatial import (
     DeformationGraph,
     SpatialAnomaly,
     detect_spatial_anomalies,

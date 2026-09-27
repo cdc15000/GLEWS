@@ -1,4 +1,4 @@
-# Contributing to GEWS
+# Contributing to GLEWS
 
 Guidelines for developing, testing, and extending the Glacier Early
 Warning System.
@@ -16,7 +16,7 @@ Warning System.
 
 ```bash
 git clone <repo-url>
-cd gews
+cd glews
 
 # Create a virtual environment
 python -m venv .venv
@@ -34,8 +34,8 @@ or testing).
 ### Verify your installation
 
 ```bash
-gews info       # prints version, dependency status, available configs
-gews demo       # runs the full pipeline on synthetic data
+glews info       # prints version, dependency status, available configs
+glews demo       # runs the full pipeline on synthetic data
 pytest -v       # runs the test suite
 ```
 
@@ -69,7 +69,7 @@ pytest -v
 pytest tests/test_timeseries.py -v
 
 # Run with coverage
-pytest --cov=gews --cov-report=term-missing
+pytest --cov=glews --cov-report=term-missing
 ```
 
 Tests are in the `tests/` directory. Each module has a corresponding
@@ -85,7 +85,7 @@ or inline test data.
 ## Project Structure
 
 ```
-gews/
+glews/
   config/                  # Site configuration YAML files
     global_watch.yaml      # Multi-site monitoring config
     nepal_2026.yaml        # Nepal-Tibet border collapse scenario
@@ -93,7 +93,7 @@ gews/
     chamoli_2021.yaml      # Chamoli retrospective case
     kolka_2002.yaml        # Kolka retrospective case
     aru_2016.yaml          # Aru retrospective case
-  src/gews/                # Main package
+  src/glews/                # Main package
     __init__.py            # Version string
     acquire.py             # Sentinel-1 SLC search and download (ASF)
     alerts.py              # Email, Slack, webhook alert channels
@@ -215,7 +215,7 @@ detect:
 Validate with:
 
 ```bash
-gews validate -c config/my_site.yaml
+glews validate -c config/my_site.yaml
 ```
 
 ### 2. Add to `global_watch.yaml` (for operational monitoring)
@@ -242,7 +242,7 @@ automatically.
 ### 3. Test
 
 ```bash
-gews monitor -c config/my_site.yaml --check-now
+glews monitor -c config/my_site.yaml --check-now
 ```
 
 ---

@@ -20,10 +20,10 @@ at Ronti Peak.
 This script therefore constructs a HYPOTHETICAL PRECURSOR SCENARIO:
 it generates synthetic displacement time series with an injected
 pre-failure acceleration signal whose parameters are physically
-plausible assumptions (not measured values), then runs the full GEWS
+plausible assumptions (not measured values), then runs the full GLEWS
 detection and cascade risk pipelines on this synthetic data to answer:
 
-    "If GEWS had been operating with InSAR coverage of this site,
+    "If GLEWS had been operating with InSAR coverage of this site,
      and the precursor signal matched our assumed scenario, would
      the system have flagged it — and how far in advance?"
 
@@ -65,17 +65,17 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
-from gews.cascade import (
+from glews.cascade import (
     CascadeAssessment,
     assess_cascade_risk,
     estimate_exposure,
     estimate_runout,
     generate_exposure_summary,
 )
-from gews.detect import AnomalyFlag, detect_anomalies
-from gews.process import DisplacementTimeseries
-from gews.synthetic import SyntheticConfig, generate_synthetic_scene
-from gews.timeseries import compute_acceleration_map
+from glews.detect import AnomalyFlag, detect_anomalies
+from glews.process import DisplacementTimeseries
+from glews.synthetic import SyntheticConfig, generate_synthetic_scene
+from glews.timeseries import compute_acceleration_map
 
 logging.basicConfig(
     level=logging.INFO,
@@ -247,14 +247,14 @@ def build_chamoli_synthetic() -> DisplacementTimeseries:
 
 
 # ---------------------------------------------------------------------------
-# 3. Run GEWS detection pipeline
+# 3. Run GLEWS detection pipeline
 # ---------------------------------------------------------------------------
 
 def run_detection(
     ts: DisplacementTimeseries, config: dict, sigma_override: float | None = None
 ) -> dict:
     """
-    Run the full GEWS Tier 0 detection pipeline on the synthetic data.
+    Run the full GLEWS Tier 0 detection pipeline on the synthetic data.
 
     Parameters
     ----------
@@ -666,7 +666,7 @@ def run_cascade_assessment(
 
 def main():
     print("=" * 70)
-    print("  GEWS Validation: Chamoli 2021 Rock-Ice Avalanche")
+    print("  GLEWS Validation: Chamoli 2021 Rock-Ice Avalanche")
     print("  Synthetic Retrospective Analysis")
     print("=" * 70)
     print()
@@ -829,15 +829,15 @@ def main():
         "detection_results": {
             "sigma_2_0": det_20,
             "sigma_2_5": det_25,
-            "would_gews_have_flagged": detected_20,
+            "would_glews_have_flagged": detected_20,
             "earliest_warning_days": det_20.get("earliest_lead_time_days"),
             "how_many_days_before": det_20.get("earliest_lead_time_days"),
             "assessment_summary": (
-                f"At sigma=2.0, GEWS {'detected' if detected_20 else 'did not detect'} "
+                f"At sigma=2.0, GLEWS {'detected' if detected_20 else 'did not detect'} "
                 f"the synthetic precursor signal in the acceleration phase "
                 f"({det_20['signal_flags']} signal flag(s), "
                 f"{det_20['noise_flags_near_site']} noise flag(s) near site). "
-                f"At sigma=2.5, GEWS {'detected' if detected_25 else 'did not detect'} "
+                f"At sigma=2.5, GLEWS {'detected' if detected_25 else 'did not detect'} "
                 f"it ({det_25['signal_flags']} signal flag(s))."
             ),
         },

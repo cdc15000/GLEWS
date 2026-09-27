@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from gews.synthetic import SyntheticConfig, generate_synthetic_scene
+from glews.synthetic import SyntheticConfig, generate_synthetic_scene
 
 
 class TestSyntheticGenerator:

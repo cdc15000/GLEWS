@@ -1,14 +1,14 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: gews-dashboard
-  namespace: gews
+  name: glews-dashboard
+  namespace: glews
   labels:
-    app.kubernetes.io/name: gews
+    app.kubernetes.io/name: glews
     app.kubernetes.io/component: dashboard
 spec:
   minAvailable: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: gews
+      app.kubernetes.io/name: glews
       app.kubernetes.io/component: dashboard

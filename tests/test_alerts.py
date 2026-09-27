@@ -1,4 +1,4 @@
-"""Tests for the alerting integrations module (gews.alerts).
+"""Tests for the alerting integrations module (glews.alerts).
 
 Covers config parsing with env-var expansion, message formatting for
 each channel, the no-channels no-op path, mock SMTP/HTTP send paths,
@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from gews.alerts import (
+from glews.alerts import (
     AlertDispatcher,
     EmailChannel,
     SlackChannel,
@@ -78,7 +78,7 @@ class TestEmailChannel:
     def test_from_config_minimal(self):
         ch = EmailChannel.from_config({
             "smtp_host": "smtp.example.com",
-            "from": "gews@example.com",
+            "from": "glews@example.com",
             "to": ["alice@example.com"],
         })
         assert ch is not None
@@ -109,7 +109,7 @@ class TestEmailChannel:
         assert "Test Site" in plain
         assert "nearest_flag_km: 1.5" in plain
 
-    @patch("gews.alerts.smtplib.SMTP")
+    @patch("glews.alerts.smtplib.SMTP")
     def test_send_starttls(self, mock_smtp_cls):
         """Port 587 uses SMTP + starttls."""
         mock_server = MagicMock()
@@ -131,7 +131,7 @@ class TestEmailChannel:
         mock_server.send_message.assert_called_once()
         mock_server.quit.assert_called_once()
 
-    @patch("gews.alerts.smtplib.SMTP_SSL")
+    @patch("glews.alerts.smtplib.SMTP_SSL")
     def test_send_ssl(self, mock_smtp_ssl_cls):
         """Port 465 uses SMTP_SSL directly."""
         mock_server = MagicMock()
@@ -150,7 +150,7 @@ class TestEmailChannel:
         mock_server.login.assert_not_called()
         mock_server.send_message.assert_called_once()
 
-    @patch("gews.alerts.smtplib.SMTP")
+    @patch("glews.alerts.smtplib.SMTP")
     def test_send_no_login_when_no_username(self, mock_smtp_cls):
         mock_server = MagicMock()
         mock_smtp_cls.return_value = mock_server
@@ -199,7 +199,7 @@ class TestSlackChannel:
             payload = SlackChannel._build_payload(level, "S", "m", {})
             assert payload["text"].startswith(expected)
 
-    @patch("gews.alerts.urllib.request.urlopen")
+    @patch("glews.alerts.urllib.request.urlopen")
     def test_send_posts_json(self, mock_urlopen):
         ch = SlackChannel(webhook_url="https://hooks.slack.com/test")
         ch.send("WARNING", "Site A", "Alert!", {"z": 3.0})
@@ -241,7 +241,7 @@ class TestWebhookChannel:
         assert "timestamp" in payload
         assert payload["details"]["max_zscore"] == 5.1
 
-    @patch("gews.alerts.urllib.request.urlopen")
+    @patch("glews.alerts.urllib.request.urlopen")
     def test_send_posts_json_with_custom_headers(self, mock_urlopen):
         ch = WebhookChannel(
             url="https://example.com/hook",
@@ -340,7 +340,7 @@ class TestAlertDispatcher:
                 "email": {
                     "smtp_host": "smtp.gmail.com",
                     "smtp_port": 587,
-                    "from": "gews@example.com",
+                    "from": "glews@example.com",
                     "to": ["analyst@example.com"],
                     "username": "${GEWS_SMTP_USER}",
                     "password": "${GEWS_SMTP_PASS}",

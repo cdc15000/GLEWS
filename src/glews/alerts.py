@@ -7,7 +7,7 @@ key in the site YAML config.  Secrets use ``${ENV_VAR}`` expansion.
 
 Usage::
 
-    from gews.alerts import AlertDispatcher
+    from glews.alerts import AlertDispatcher
 
     dispatcher = AlertDispatcher.from_config(site_config)
     results = dispatcher.dispatch("WARNING", "Aletsch Glacier",

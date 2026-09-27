@@ -25,7 +25,7 @@ import numpy as np
 from scipy import ndimage
 from sklearn.cluster import DBSCAN
 
-from gews.timeseries import (
+from glews.timeseries import (
     AccelerationMap,
     bocpd_changepoints,
     detect_step_changes,
@@ -267,7 +267,7 @@ def detect_anomalies(
         and dates is not None
         and displacement is not None
     ):
-        from gews.spatial import detect_spatial_anomalies
+        from glews.spatial import detect_spatial_anomalies
 
         try:
             spatial_anomalies = detect_spatial_anomalies(
@@ -310,7 +310,7 @@ def detect_anomalies(
     ):
         model_path = cls_config.get("model_path", "")
         if model_path and Path(model_path).is_file():
-            from gews.classifier import PrecursorClassifier, PrecursorFeatureExtractor
+            from glews.classifier import PrecursorClassifier, PrecursorFeatureExtractor
 
             try:
                 clf = PrecursorClassifier.load(model_path)

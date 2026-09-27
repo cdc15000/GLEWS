@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from gews.timeseries import (
+from glews.timeseries import (
     bocpd_changepoints,
     compute_acceleration_map,
     detect_step_changes,

@@ -1,6 +1,6 @@
 # Glacier Early Warning System — Validation Report
 
-Validation of GEWS detection algorithms against four glacier and rock-slope collapse events: two retrospective analyses of real events and two synthetic reconstructions based on published event parameters.
+Validation of GLEWS detection algorithms against four glacier and rock-slope collapse events: two retrospective analyses of real events and two synthetic reconstructions based on published event parameters.
 
 ---
 
@@ -19,7 +19,7 @@ Validation of GEWS detection algorithms against four glacier and rock-slope coll
 
 ### Detection pipeline
 
-All four events were processed through the same GEWS Tier 0 detection pipeline:
+All four events were processed through the same GLEWS Tier 0 detection pipeline:
 
 1. **Seasonal decomposition** — displacement time series decomposed into linear trend + annual/semi-annual harmonics + residual via least-squares fit
 2. **Acceleration estimation** — sliding-window velocity regression (60-day window, 12-day step) on detrended/deseasonalized residuals
@@ -32,7 +32,7 @@ All four events were processed through the same GEWS Tier 0 detection pipeline:
 ### Real vs. synthetic events
 
 - **Real events** (Nepal 2026, Weisshorn) were analyzed using actual satellite data products (NISAR GOFF, Sentinel-1). Detection parameters were fixed before analysis — no tuning to the specific event.
-- **Synthetic events** (Chamoli, Aru) used GEWS's synthetic scene generator (`synthetic.py`) to create InSAR displacement fields modeled on published event parameters (failure volume, collapse velocity, pre-failure acceleration rate, and slope geometry from the literature). These validate that the detection algorithms can identify precursor signals with realistic noise and seasonal contamination, but do not validate the data-acquisition chain.
+- **Synthetic events** (Chamoli, Aru) used GLEWS's synthetic scene generator (`synthetic.py`) to create InSAR displacement fields modeled on published event parameters (failure volume, collapse velocity, pre-failure acceleration rate, and slope geometry from the literature). These validate that the detection algorithms can identify precursor signals with realistic noise and seasonal contamination, but do not validate the data-acquisition chain.
 
 ---
 
@@ -123,7 +123,7 @@ On February 7, 2021, a rock and ice avalanche in the Chamoli district of Uttarak
 
 ### Synthetic reconstruction
 
-The GEWS synthetic scene generator created a displacement field modeled on published Chamoli parameters:
+The GLEWS synthetic scene generator created a displacement field modeled on published Chamoli parameters:
 
 - **Failure volume:** ~27 million m^3 (rock + ice)
 - **Pre-failure acceleration:** Modeled as gradual acceleration over ~45 days, based on reported precursor signals in optical satellite imagery

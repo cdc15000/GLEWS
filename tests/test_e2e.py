@@ -15,14 +15,14 @@ import numpy as np
 import pytest
 import yaml
 
-from gews.alerts import AlertDispatcher, WebhookChannel
-from gews.crosscheck import apply_tier1_filters
-from gews.detect import AnomalyFlag, detect_anomalies
-from gews.provenance import ProvenanceTracker
-from gews.report import generate_report
-from gews.synthetic import generate_synthetic_scene
-from gews.timeseries import compute_acceleration_map
-from gews.validate import validate_config, validate_config_file
+from glews.alerts import AlertDispatcher, WebhookChannel
+from glews.crosscheck import apply_tier1_filters
+from glews.detect import AnomalyFlag, detect_anomalies
+from glews.provenance import ProvenanceTracker
+from glews.report import generate_report
+from glews.synthetic import generate_synthetic_scene
+from glews.timeseries import compute_acceleration_map
+from glews.validate import validate_config, validate_config_file
 
 
 # ---------------------------------------------------------------------------
@@ -173,12 +173,12 @@ class TestFullPipelineSynthetic:
 
 
 class TestDemoCommand:
-    """Run `gews demo --no-plots` via Click CliRunner, assert exit 0 and
+    """Run `glews demo --no-plots` via Click CliRunner, assert exit 0 and
     flags found."""
 
     def test_demo_command(self, tmp_path):
         from click.testing import CliRunner
-        from gews.cli import main
+        from glews.cli import main
 
         runner = CliRunner()
         result = runner.invoke(main, [
@@ -208,7 +208,7 @@ class TestMonitorSingleCheck:
     no crash."""
 
     def test_monitor_single_check(self, tmp_path):
-        from gews.monitor import run_check_cycle
+        from glews.monitor import run_check_cycle
 
         site_config = {
             "site": {
@@ -272,7 +272,7 @@ class TestAlertDispatchIntegration:
         flag = _make_flag(peak_zscore=8.0)
 
         # Create a webhook channel with a mock
-        with patch("gews.alerts.urllib.request.urlopen") as mock_urlopen:
+        with patch("glews.alerts.urllib.request.urlopen") as mock_urlopen:
             dispatcher = AlertDispatcher.from_config({
                 "alerts": {
                     "webhook": {
@@ -345,7 +345,7 @@ class TestTrainClassifierE2E:
     """Train with small samples, verify model file and accuracy > 0.7."""
 
     def test_train_classifier_e2e(self, tmp_path):
-        from gews.classifier import PrecursorClassifier, train_precursor_model
+        from glews.classifier import PrecursorClassifier, train_precursor_model
 
         model_path = tmp_path / "model.json"
         metrics = train_precursor_model(
@@ -371,7 +371,7 @@ class TestTrainClassifierE2E:
 
         # Model should be loadable and produce valid predictions
         model = PrecursorClassifier.load(model_path)
-        from gews.classifier import LandslideTrainingData
+        from glews.classifier import LandslideTrainingData
 
         gen = LandslideTrainingData(seed=999)
         X, y = gen.generate_synthetic_training_set(n_positive=20, n_negative=80)

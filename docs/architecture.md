@@ -1,4 +1,4 @@
-# GEWS Architecture
+# GLEWS Architecture
 
 Detailed architecture of the Glacier Early Warning System: data flow,
 detection algorithms, quality filtering, cascade risk assessment,
@@ -8,7 +8,7 @@ monitoring loop, and alert dispatch.
 
 ## Pipeline Overview
 
-GEWS is a three-tier pipeline:
+GLEWS is a three-tier pipeline:
 
 ```
 Satellite Data
