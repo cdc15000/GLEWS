@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/banner.svg" alt="GLEWS - Glacier and Landslide Early Warning System" width="100%">
+  <img src="docs/hero.svg" alt="GLEWS - Glacier and Landslide Early Warning System" width="100%">
 </p>
 
 # GLEWS: Glacier and Landslide Early Warning System

@@ -70,13 +70,13 @@
   <path d="M320,48 Q400,32 480,48" fill="none" stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="4,3" opacity="0.4"/>
 
   <!-- radar beam cone -->
-  <path d="M400,62 L320,155 L480,155 Z" fill="#1e40af" opacity="0.12"/>
-  <path d="M400,62 L320,155 L480,155 Z" fill="none" stroke="#1e40af" stroke-width="0.8" stroke-dasharray="4,3" opacity="0.5"/>
+  <path d="M400,62 L320,155 L480,155 Z" fill="#1e40af" opacity="0.25"/>
+  <path d="M400,62 L320,155 L480,155 Z" fill="none" stroke="#1e40af" stroke-width="1" stroke-dasharray="4,3" opacity="0.8"/>
 
   <!-- scan lines within beam -->
-  <line x1="355" y1="105" x2="445" y2="105" stroke="#1e40af" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.3"/>
-  <line x1="340" y1="125" x2="460" y2="125" stroke="#1e40af" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.3"/>
-  <line x1="328" y1="142" x2="472" y2="142" stroke="#1e40af" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.3"/>
+  <line x1="355" y1="105" x2="445" y2="105" stroke="#1e40af" stroke-width="0.6" stroke-dasharray="3,3" opacity="0.5"/>
+  <line x1="340" y1="125" x2="460" y2="125" stroke="#1e40af" stroke-width="0.6" stroke-dasharray="3,3" opacity="0.5"/>
+  <line x1="328" y1="142" x2="472" y2="142" stroke="#1e40af" stroke-width="0.6" stroke-dasharray="3,3" opacity="0.5"/>
 
   <!-- deformation signal dots on the mountain (what the radar detects) -->
   <circle cx="395" cy="135" r="2.5" fill="#f59e0b" opacity="0.7"/>
