@@ -1,16 +1,16 @@
-# GLEWS — Glacier Early Warning System
+# GLEWS: Glacier and Landslide Early Warning System
 
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen)]()
-[![Tests](https://img.shields.io/badge/tests-377%20passed-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-419%20passed-brightgreen)]()
 [![Coverage](https://img.shields.io/badge/coverage-TBD-yellow)]()
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)]()
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)]()
 
 Satellite-based early warning pipeline for unstable glaciers and rock slopes.
 
-GLEWS screens displacement time series derived from satellite radar (Sentinel-1 C-band and NISAR L-band) for anomalous acceleration — the signal that precedes catastrophic glacier and rock-slope collapses. It implements Tier 0 (automated screening), Tier 1 (cascade risk filtering with cross-check validation), and Tier 2 (analyst dashboard) stages, plus an operational `glews monitor` mode that continuously watches 13 configured sites worldwide for new acquisitions and raises alerts via email, Slack, or webhook.
+GLEWS screens displacement time series derived from satellite radar (Sentinel-1 C-band and NISAR L-band) for anomalous acceleration, the signal that precedes catastrophic glacier and rock-slope collapses. It implements Tier 0 (automated screening), Tier 1 (cascade risk filtering with cross-check validation), and Tier 2 (analyst dashboard) stages, plus an operational `glews monitor` mode that continuously watches 13 configured sites worldwide for new acquisitions and raises alerts via email, Slack, or webhook.
 
-The Glacier Early Warning System comprises **22 Python modules** (~11 400 lines) with **377+ tests** across 18 test files, and exposes **15 CLI commands**. All tests run on synthetic data with no network access required.
+The Glacier and Landslide Early Warning System comprises **22 Python modules** (~11 400 lines) with **419 tests** across 18 test files, and exposes **15 CLI commands**. All tests run on synthetic data with no network access required.
 
 ---
 
@@ -20,18 +20,18 @@ Retrospective and synthetic validation against four glacier/rock-slope collapse 
 
 | Event | Type | Lead Time | Key Metric | Data Source |
 |-------|------|-----------|------------|-------------|
-| **Nepal–Tibet Border 2026** | Real event (26 Aug 2026) | **43 days** | 5.06 m vertical subsidence, 295 GOFF anomaly flags | NISAR GOFF L-band |
+| **Nepal-Tibet Border 2026** | Real event (26 Aug 2026) | **43 days** | 5.06 m vertical subsidence, 295 GOFF anomaly flags | NISAR GOFF L-band |
 | **Weisshorn (Randa), Switzerland** | Real event | N/A | **81 mm** cumulative displacement detected | Sentinel-1 C-band |
 | **Chamoli, India (Feb 2021)** | Synthetic reconstruction | **~30 days** | Pre-collapse acceleration detected via z-score | Synthetic (modeled on real event parameters) |
-| **Aru Glaciers, Tibet (Jul 2016)** | Synthetic reconstruction | **39–54 days** | Dual-glacier collapse precursor signals | Synthetic (modeled on real event parameters) |
+| **Aru Glaciers, Tibet (Jul 2016)** | Synthetic reconstruction | **39-54 days** | Dual-glacier collapse precursor signals | Synthetic (modeled on real event parameters) |
 
 Details in [docs/validation.md](docs/validation.md).
 
 ### Nepal 2026 case study (primary validation)
 
-Retrospective analysis of the August 26, 2026 Nepal–Tibet border glacier–rock collapse against archived NISAR data:
+Retrospective analysis of the August 26, 2026 Nepal-Tibet border glacier-rock collapse against archived NISAR data:
 
-- **43 days of advance notice** — the sigma-threshold acceleration-anomaly detector flagged the site well ahead of the collapse, even though Voight's inverse-velocity law failed to converge (the failure was a two-phase step-change, not smooth pre-failure acceleration).
+- **43 days of advance notice** - the sigma-threshold acceleration-anomaly detector flagged the site well ahead of the collapse, even though Voight's inverse-velocity law failed to converge (the failure was a two-phase step-change, not smooth pre-failure acceleration).
 - **5.06 m of vertical subsidence** measured in the lead-up to collapse, decomposed from line-of-sight displacement using the site's local incidence geometry.
 - **295 anomaly flags** from NISAR GOFF (amplitude offset-tracking) detection, which stayed coherent through the meter-scale displacement that saturated phase-based (GUNW) InSAR.
 
@@ -60,10 +60,10 @@ glews demo --output output
 
 This generates a synthetic InSAR scene with an injected pre-failure acceleration signal, runs anomaly detection, and produces:
 
-- **`output/report.md`** — Summary of detected anomalies
-- **`output/flags.geojson`** — Flagged sites for viewing in QGIS / Google Earth
-- **`output/figures/anomaly_map.png`** — Spatial acceleration z-score map
-- **`output/figures/flag_*_timeseries.png`** — Time-series plots per flagged site
+- **`output/report.md`** - Summary of detected anomalies
+- **`output/flags.geojson`** - Flagged sites for viewing in QGIS / Google Earth
+- **`output/figures/anomaly_map.png`** - Spatial acceleration z-score map
+- **`output/figures/flag_*_timeseries.png`** - Time-series plots per flagged site
 
 ### Operational monitoring (real NISAR data)
 
@@ -202,7 +202,7 @@ Sentinel-1 SLC data         NISAR GUNW / GOFF products
 | `process.py` | ISCE-2 + MintPy InSAR processing orchestration |
 | `provenance.py` | Audit trail and reproducibility tracking |
 | `report.py` | Report generation (plots, GeoJSON, Markdown) |
-| `spatial.py` | Spatial analysis — slope, aspect, viewshed, DEM operations |
+| `spatial.py` | Spatial analysis - slope, aspect, viewshed, DEM operations |
 | `synthetic.py` | Synthetic InSAR scene generation |
 | `tactical.py` | Tactical alert prioritization and routing |
 | `timeseries.py` | Time-series analysis: seasonal decomposition, z-scores, BOCPD, Voight |
@@ -262,35 +262,35 @@ The core analytical component. For each pixel:
 2. **Estimates acceleration** via sliding-window velocity regression on the residuals
 3. **Normalizes** each pixel's acceleration against its own historical baseline (z-score)
 4. **Detects changepoints** via Bayesian Online Changepoint Detection (BOCPD)
-5. **Detects step changes** — sudden displacement jumps characteristic of two-phase failures
+5. **Detects step changes** - sudden displacement jumps characteristic of two-phase failures
 6. **Clusters** spatially connected anomalous pixels using DBSCAN
 7. **Scores and ranks** clusters by composite anomaly score
 8. Optionally fits **Voight's failure law** (inverse-velocity trend) to top candidates
 9. Optionally runs **transfer-learning classifier** scoring via `classifier.py`
 
-No labeled collapse data is required — each site is compared to its own history.
+No labeled collapse data is required - each site is compared to its own history.
 
 ### 4. Atmospheric correction (`atmosphere.py`)
 
 Detects and corrects atmospheric phase screens (APS) that contaminate InSAR measurements:
-- **Stratified APS** — elevation-correlated delay, detected by DEM regression per epoch
-- **Turbulent APS** — spatially correlated noise at 5–50 km scales, detected via power spectrum analysis
+- **Stratified APS** - elevation-correlated delay, detected by DEM regression per epoch
+- **Turbulent APS** - spatially correlated noise at 5-50 km scales, detected via power spectrum analysis
 
 ### 5. Tier 1 cross-check filters (`crosscheck.py`)
 
 Multi-sensor cross-check filters that eliminate false positives:
-- **Coherence quality** — adequate interferometric coherence at flagged pixels
-- **Spatial consistency** — contiguous deformation lobe vs. scattered noise
-- **Temporal consistency** — signal persistence across multiple SAR acquisitions
-- **Optical cross-check** — Sentinel-2 visible surface change (stub)
+- **Coherence quality** - adequate interferometric coherence at flagged pixels
+- **Spatial consistency** - contiguous deformation lobe vs. scattered noise
+- **Temporal consistency** - signal persistence across multiple SAR acquisitions
+- **Optical cross-check** - Sentinel-2 visible surface change (stub)
 
 ### 6. Cascade risk assessment (`glews assess`)
 
 Evaluates whether flagged sites can produce dangerous downstream cascades:
 - **Volume estimation** from deformation extent and slope geometry
 - **Valley confinement analysis** from DEM
-- **Runout modeling** — Scheidegger (1973) volume-dependent mobility relation
-- **Population exposure mapping** — WorldPop or synthetic settlement generation
+- **Runout modeling** - Scheidegger (1973) volume-dependent mobility relation
+- **Population exposure mapping** - WorldPop or synthetic settlement generation
 
 ### 7. Spatial analysis (`spatial.py`)
 
@@ -319,7 +319,7 @@ Prioritizes and routes alerts based on urgency, affected population, and respond
 
 ### 11. Provenance tracking (`provenance.py`)
 
-Records full audit trails for every detection run — input data hashes, configuration snapshots, software versions, and result checksums. Enables reproducibility and forensic review via `glews audit`.
+Records full audit trails for every detection run - input data hashes, configuration snapshots, software versions, and result checksums. Enables reproducibility and forensic review via `glews audit`.
 
 ### 12. Benchmarking (`benchmark.py`)
 
@@ -328,15 +328,15 @@ Performance benchmarking suite for profiling detection pipeline throughput, memo
 ### 13. Alerting (`alerts.py`)
 
 Multi-channel alert dispatch:
-- **Email** — SMTP with TLS, configurable recipients
-- **Slack** — incoming webhook integration
-- **Generic webhook** — HTTP POST with JSON payload
+- **Email** - SMTP with TLS, configurable recipients
+- **Slack** - incoming webhook integration
+- **Generic webhook** - HTTP POST with JSON payload
 
 Secrets use `${ENV_VAR}` expansion so credentials stay out of config files.
 
 ### 14. Analyst dashboard (`glews dashboard`)
 
-Tier 2 review interface — a single-page web dashboard using Python's built-in `http.server`. Analysts review flagged sites by severity, inspect time-series plots, and classify flags as Watch / Warning / Cleared.
+Tier 2 review interface - a single-page web dashboard using Python's built-in `http.server`. Analysts review flagged sites by severity, inspect time-series plots, and classify flags as Watch / Warning / Cleared.
 
 ---
 
@@ -371,13 +371,13 @@ Site-specific parameters are defined in YAML files under `config/`. See `config/
 
 Production deployment options are documented in [docs/deployment.md](docs/deployment.md):
 
-- **Docker / Docker Compose** — `docker compose up -d` starts monitor + dashboard
-- **Kubernetes** — Helm-style manifests in `deploy/kubernetes/`
-- **systemd** — unit file at `deploy/systemd/glews-monitor.service`
-- **cron** — periodic single-pass checks via `deploy/cron/glews-check.cron`
-- **Monitoring** — Prometheus metrics and health checks in `deploy/monitoring/`
+- **Docker / Docker Compose** - `docker compose up -d` starts monitor + dashboard
+- **Kubernetes** - Helm-style manifests in `deploy/kubernetes/`
+- **systemd** - unit file at `deploy/systemd/glews-monitor.service`
+- **cron** - periodic single-pass checks via `deploy/cron/glews-check.cron`
+- **Monitoring** - Prometheus metrics and health checks in `deploy/monitoring/`
 
-Environment variables control all deployment configuration — see the [deployment guide](docs/deployment.md) for the full reference.
+Environment variables control all deployment configuration - see the [deployment guide](docs/deployment.md) for the full reference.
 
 ---
 
@@ -385,7 +385,7 @@ Environment variables control all deployment configuration — see the [deployme
 
 ```bash
 pip install -e ".[dev]"
-pytest                     # run 377+ tests across 18 files
+pytest                     # run 419 tests across 18 files
 pytest -v --tb=short       # verbose with short tracebacks
 pytest tests/test_integration.py  # end-to-end pipeline test
 ```
@@ -405,9 +405,9 @@ machine urs.earthdata.nasa.gov
 ```
 
 Additional data for full-pipeline runs:
-- **Sentinel-1 SLC** or **NISAR GUNW/GOFF** products — fetched via `glews search`/`glews download`/`glews monitor`
-- **DEM** (for Tier 1 cascade assessment) — e.g. Copernicus GLO-30
-- **Population data** (optional) — e.g. WorldPop raster for exposure estimates
+- **Sentinel-1 SLC** or **NISAR GUNW/GOFF** products - fetched via `glews search`/`glews download`/`glews monitor`
+- **DEM** (for Tier 1 cascade assessment) - e.g. Copernicus GLO-30
+- **Population data** (optional) - e.g. WorldPop raster for exposure estimates
 
 The synthetic demo (`glews demo`) requires none of the above.
 
@@ -417,7 +417,7 @@ The synthetic demo (`glews demo`) requires none of the above.
 
 ### Acceleration z-score
 
-Each site is compared to its own historical behavior — a glacier that routinely accelerates every summer is not flagged for its summer acceleration, only when acceleration exceeds its own historical range:
+Each site is compared to its own historical behavior - a glacier that routinely accelerates every summer is not flagged for its summer acceleration, only when acceleration exceeds its own historical range:
 
 ```
 z(t) = (a(t) - mu_baseline) / sigma_baseline
@@ -429,7 +429,7 @@ Bayesian Online Changepoint Detection (Adams & MacKay 2007) with a Student-t obs
 
 ### Step-change detection
 
-Detects sudden displacement jumps — the failure mode observed in the Nepal 2026 event, where collapse was preceded by two discrete acceleration steps rather than smooth pre-failure creep.
+Detects sudden displacement jumps - the failure mode observed in the Nepal 2026 event, where collapse was preceded by two discrete acceleration steps rather than smooth pre-failure creep.
 
 ### Voight's failure law
 
@@ -448,9 +448,9 @@ MIT (see `pyproject.toml`).
 ## References
 
 - Adams, R.P. & MacKay, D.J.C. "Bayesian Online Changepoint Detection." arXiv:0710.3742 (2007).
-- Scheidegger, A.E. "On the prediction of the reach and velocity of catastrophic landslides." *Rock Mechanics* 5, 231–236 (1973).
+- Scheidegger, A.E. "On the prediction of the reach and velocity of catastrophic landslides." *Rock Mechanics* 5, 231-236 (1973).
 - Wang, W. et al. "Early warning system for glacial lake outburst floods in Cirenmaco, Tibet." *Int. J. Disaster Risk Reduct.* 73, 102914 (2022).
-- Voight, B. "A method for prediction of volcanic eruptions." *Nature* 332, 125–130 (1988).
+- Voight, B. "A method for prediction of volcanic eruptions." *Nature* 332, 125-130 (1988).
 - Shirzaei, M. "Satellite images before Nepal disaster showed warning signs." *Nature* News Q&A, 2 September 2026.
 - Rosen, P.A. et al. "An InSAR time series approach." *J. Geophys. Res.* (2004). [ISCE-2 framework]
 - Yunjun, Z. et al. "Small baseline InSAR time series analysis." *Comput. Geosci.* (2019). [MintPy]
