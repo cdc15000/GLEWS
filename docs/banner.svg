@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="800" height="200">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="snow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f1f5f9"/>
+      <stop offset="100%" stop-color="#cbd5e1"/>
+    </linearGradient>
+  </defs>
+
+  <!-- background -->
+  <rect width="800" height="200" fill="url(#sky)"/>
+
+  <!-- stars -->
+  <circle cx="50" cy="25" r="1" fill="#94a3b8" opacity="0.6"/>
+  <circle cx="130" cy="45" r="0.8" fill="#94a3b8" opacity="0.4"/>
+  <circle cx="250" cy="18" r="1" fill="#94a3b8" opacity="0.5"/>
+  <circle cx="380" cy="35" r="0.7" fill="#94a3b8" opacity="0.3"/>
+  <circle cx="520" cy="22" r="1" fill="#94a3b8" opacity="0.5"/>
+  <circle cx="650" cy="40" r="0.8" fill="#94a3b8" opacity="0.4"/>
+  <circle cx="720" cy="15" r="1" fill="#94a3b8" opacity="0.6"/>
+  <circle cx="180" cy="60" r="0.6" fill="#94a3b8" opacity="0.3"/>
+  <circle cx="460" cy="50" r="0.7" fill="#94a3b8" opacity="0.4"/>
+  <circle cx="590" cy="30" r="0.9" fill="#94a3b8" opacity="0.5"/>
+
+  <!-- distant mountain range (back layer) -->
+  <path d="M0,200 L0,155 L30,140 L60,148 L100,125 L130,138 L160,115 L190,130 L220,108 L250,120 L280,100 L310,118 L340,95 L370,112 L400,88 L430,105 L460,92 L490,110 L520,98 L550,115 L580,105 L610,120 L640,110 L670,125 L700,115 L730,130 L760,122 L800,135 L800,200 Z" fill="#1e3a5f" opacity="0.5"/>
+
+  <!-- mid mountain range -->
+  <path d="M0,200 L0,165 L40,150 L70,158 L110,135 L140,148 L180,120 L210,140 L250,115 L280,132 L310,108 L340,125 L380,100 L410,118 L440,95 L470,115 L500,105 L530,122 L560,112 L590,128 L630,118 L660,135 L700,125 L740,140 L770,132 L800,142 L800,200 Z" fill="#334155"/>
+
+  <!-- foreground mountains -->
+  <path d="M0,200 L0,175 L50,160 L80,168 L120,142 L155,158 L200,130 L240,150 L280,125 L320,145 L360,118 L400,138 L440,115 L475,135 L510,120 L545,140 L580,128 L620,145 L660,135 L700,148 L740,138 L780,150 L800,145 L800,200 Z" fill="#475569"/>
+
+  <!-- snow on peaks -->
+  <path d="M276,125 L280,125 L286,131 L280,129 Z" fill="url(#snow)" opacity="0.8"/>
+  <path d="M356,118 L360,118 L368,126 L360,123 Z" fill="url(#snow)" opacity="0.8"/>
+  <path d="M436,115 L440,115 L448,123 L440,120 Z" fill="url(#snow)" opacity="0.9"/>
+  <path d="M196,130 L200,130 L207,137 L200,134 Z" fill="url(#snow)" opacity="0.7"/>
+  <path d="M116,142 L120,142 L126,148 L120,146 Z" fill="url(#snow)" opacity="0.7"/>
+
+  <!-- glacier surface (subtle ice blue patches) -->
+  <path d="M270,135 L290,130 L310,140 L295,145 Z" fill="#60a5fa" opacity="0.08"/>
+  <path d="M350,128 L375,120 L395,132 L378,138 Z" fill="#60a5fa" opacity="0.08"/>
+  <path d="M430,125 L455,118 L470,128 L452,133 Z" fill="#60a5fa" opacity="0.08"/>
+
+  <!-- nearest ground layer -->
+  <path d="M0,200 L0,185 L60,178 L120,182 L180,175 L240,180 L300,172 L360,178 L420,170 L480,176 L540,172 L600,178 L660,174 L720,180 L780,176 L800,178 L800,200 Z" fill="#64748b"/>
+
+  <!-- satellite body -->
+  <g transform="translate(200,55)">
+    <!-- solar panel left -->
+    <rect x="-42" y="-4" width="34" height="8" rx="1" fill="#60a5fa" opacity="0.8"/>
+    <line x1="-42" y1="0" x2="-8" y2="0" stroke="#3b82f6" stroke-width="0.5"/>
+    <line x1="-31" y1="-4" x2="-31" y2="4" stroke="#3b82f6" stroke-width="0.4"/>
+    <line x1="-20" y1="-4" x2="-20" y2="4" stroke="#3b82f6" stroke-width="0.4"/>
+    <!-- body -->
+    <rect x="-7" y="-5" width="14" height="10" rx="2" fill="#e2e8f0"/>
+    <rect x="-5" y="-3" width="4" height="3" rx="0.5" fill="#60a5fa" opacity="0.6"/>
+    <!-- solar panel right -->
+    <rect x="8" y="-4" width="34" height="8" rx="1" fill="#60a5fa" opacity="0.8"/>
+    <line x1="8" y1="0" x2="42" y2="0" stroke="#3b82f6" stroke-width="0.5"/>
+    <line x1="19" y1="-4" x2="19" y2="4" stroke="#3b82f6" stroke-width="0.4"/>
+    <line x1="30" y1="-4" x2="30" y2="4" stroke="#3b82f6" stroke-width="0.4"/>
+  </g>
+
+  <!-- orbit arc -->
+  <path d="M120,48 Q200,32 280,48" fill="none" stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="4,3" opacity="0.4"/>
+
+  <!-- radar beam cone -->
+  <path d="M200,62 L120,155 L280,155 Z" fill="#60a5fa" opacity="0.06"/>
+  <path d="M200,62 L120,155 L280,155 Z" fill="none" stroke="#60a5fa" stroke-width="0.8" stroke-dasharray="4,3" opacity="0.25"/>
+
+  <!-- scan lines within beam -->
+  <line x1="155" y1="105" x2="245" y2="105" stroke="#60a5fa" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.15"/>
+  <line x1="140" y1="125" x2="260" y2="125" stroke="#60a5fa" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.15"/>
+  <line x1="128" y1="142" x2="272" y2="142" stroke="#60a5fa" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.15"/>
+
+  <!-- deformation signal dots on the mountain (what the radar detects) -->
+  <circle cx="195" cy="135" r="2.5" fill="#f59e0b" opacity="0.7"/>
+  <circle cx="205" cy="132" r="2" fill="#f59e0b" opacity="0.6"/>
+  <circle cx="200" cy="140" r="1.8" fill="#f59e0b" opacity="0.5"/>
+  <circle cx="210" cy="138" r="1.5" fill="#f59e0b" opacity="0.4"/>
+
+  <!-- title text -->
+  <text x="480" y="82" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="32" fill="#f1f5f9" font-weight="700" letter-spacing="2">GLEWS</text>
+  <text x="480" y="108" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="13" fill="#94a3b8" font-weight="400" letter-spacing="0.5">Glacier and Landslide Early Warning System</text>
+
+  <!-- specs -->
+  <line x1="480" y1="120" x2="720" y2="120" stroke="#475569" stroke-width="0.5"/>
+  <text x="480" y="140" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="11" fill="#64748b">NISAR L-band SAR  /  12-day revisit  /  GUNW + GOFF</text>
+  <text x="480" y="158" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="11" fill="#64748b">Satellite-based deformation screening at scale</text>
+  <text x="480" y="176" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="11" fill="#64748b">~215,000 glaciers targetable  /  Open source (MIT)</text>
+</svg>
