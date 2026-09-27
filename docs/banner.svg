@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="800" height="200">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="100%">
   <defs>
     <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#0f172a"/>
@@ -50,7 +50,7 @@
   <path d="M0,200 L0,185 L60,178 L120,182 L180,175 L240,180 L300,172 L360,178 L420,170 L480,176 L540,172 L600,178 L660,174 L720,180 L780,176 L800,178 L800,200 Z" fill="#64748b"/>
 
   <!-- satellite body -->
-  <g transform="translate(200,55)">
+  <g transform="translate(400,55)">
     <!-- solar panel left -->
     <rect x="-42" y="-4" width="34" height="8" rx="1" fill="#60a5fa" opacity="0.8"/>
     <line x1="-42" y1="0" x2="-8" y2="0" stroke="#3b82f6" stroke-width="0.5"/>
@@ -67,30 +67,20 @@
   </g>
 
   <!-- orbit arc -->
-  <path d="M120,48 Q200,32 280,48" fill="none" stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="4,3" opacity="0.4"/>
+  <path d="M320,48 Q400,32 480,48" fill="none" stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="4,3" opacity="0.4"/>
 
   <!-- radar beam cone -->
-  <path d="M200,62 L120,155 L280,155 Z" fill="#60a5fa" opacity="0.06"/>
-  <path d="M200,62 L120,155 L280,155 Z" fill="none" stroke="#60a5fa" stroke-width="0.8" stroke-dasharray="4,3" opacity="0.25"/>
+  <path d="M400,62 L320,155 L480,155 Z" fill="#60a5fa" opacity="0.06"/>
+  <path d="M400,62 L320,155 L480,155 Z" fill="none" stroke="#60a5fa" stroke-width="0.8" stroke-dasharray="4,3" opacity="0.25"/>
 
   <!-- scan lines within beam -->
-  <line x1="155" y1="105" x2="245" y2="105" stroke="#60a5fa" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.15"/>
-  <line x1="140" y1="125" x2="260" y2="125" stroke="#60a5fa" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.15"/>
-  <line x1="128" y1="142" x2="272" y2="142" stroke="#60a5fa" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.15"/>
+  <line x1="355" y1="105" x2="445" y2="105" stroke="#60a5fa" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.15"/>
+  <line x1="340" y1="125" x2="460" y2="125" stroke="#60a5fa" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.15"/>
+  <line x1="328" y1="142" x2="472" y2="142" stroke="#60a5fa" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.15"/>
 
   <!-- deformation signal dots on the mountain (what the radar detects) -->
-  <circle cx="195" cy="135" r="2.5" fill="#f59e0b" opacity="0.7"/>
-  <circle cx="205" cy="132" r="2" fill="#f59e0b" opacity="0.6"/>
-  <circle cx="200" cy="140" r="1.8" fill="#f59e0b" opacity="0.5"/>
-  <circle cx="210" cy="138" r="1.5" fill="#f59e0b" opacity="0.4"/>
-
-  <!-- title text -->
-  <text x="480" y="82" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="32" fill="#f1f5f9" font-weight="700" letter-spacing="2">GLEWS</text>
-  <text x="480" y="108" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="13" fill="#94a3b8" font-weight="400" letter-spacing="0.5">Glacier and Landslide Early Warning System</text>
-
-  <!-- specs -->
-  <line x1="480" y1="120" x2="720" y2="120" stroke="#e2e8f0" stroke-width="0.7"/>
-  <text x="480" y="140" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="11" fill="#e2e8f0">NISAR L-band SAR  /  12-day revisit  /  GUNW + GOFF</text>
-  <text x="480" y="158" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="11" fill="#e2e8f0">Satellite-based deformation screening at scale</text>
-  <text x="480" y="176" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="11" fill="#e2e8f0">~215,000 glaciers targetable  /  Open source (MIT)</text>
+  <circle cx="395" cy="135" r="2.5" fill="#f59e0b" opacity="0.7"/>
+  <circle cx="405" cy="132" r="2" fill="#f59e0b" opacity="0.6"/>
+  <circle cx="400" cy="140" r="1.8" fill="#f59e0b" opacity="0.5"/>
+  <circle cx="410" cy="138" r="1.5" fill="#f59e0b" opacity="0.4"/>
 </svg>
