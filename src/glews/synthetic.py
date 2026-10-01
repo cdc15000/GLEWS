@@ -14,6 +14,7 @@ without requiring actual Sentinel-1 data or InSAR processing.
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -219,8 +220,8 @@ def _default_nepal_config() -> SyntheticConfig:
                 "center_col": 120,
                 "radius_pixels": 12,
                 "onset_days_before_end": 90,  # acceleration begins ~3 months before
-                "max_acceleration_m_yr2": 0.15,  # ramps to this at collapse
-                "ramp_type": "exponential",
+                "max_acceleration_m_yr2": 0.5,
+                "ramp_type": "voight",
             },
             # Second zone: a glacier that moves but doesn't fail (false positive test)
             {
@@ -341,15 +342,24 @@ def _inject_failure_signal(
         progress = (t - onset_date) / max(1, end_date - onset_date)
         progress = min(progress, 1.0)
 
-        if ramp_type == "exponential":
+        if ramp_type == "voight":
+            tf = onset * 1.1
+            t_since = progress * onset
+            t_since = min(t_since, tf * 0.99)
+            voight_disp = math.log(tf / (tf - t_since))
+            voight_max = math.log(tf / (tf - onset))
+            temporal = voight_disp / voight_max if voight_max > 0 else progress
+        elif ramp_type == "exponential":
             # Exponential ramp — slow start, rapid increase
             temporal = (np.exp(3 * progress) - 1) / (np.e**3 - 1)
         else:
             temporal = progress
 
-        # Displacement from acceleration: d = 0.5 * a * t²
         t_since_onset_yr = (t - onset_date) / 365.25
-        accel_disp = 0.5 * max_accel * temporal * t_since_onset_yr**2
+        if ramp_type == "voight":
+            accel_disp = max_accel * (onset / 365.25) * temporal
+        else:
+            accel_disp = 0.5 * max_accel * temporal * t_since_onset_yr**2
 
         # Add to displacement (negative = downslope motion away from satellite)
         displacement[i] -= accel_disp * spatial

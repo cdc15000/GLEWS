@@ -845,6 +845,62 @@ def _deduplicate_flags(
     return list(best.values())
 
 
+def _voight_from_timeseries(
+    timeseries: dict,
+    min_points: int,
+) -> dict | None:
+    """Derive velocity from displacement timeseries and fit Voight."""
+    values = np.array(timeseries["values"], dtype=float)
+    dates_str = timeseries["dates"]
+    if len(values) < min_points + 6:
+        return None
+
+    dates_ord = np.array(
+        [datetime.strptime(d, "%Y-%m-%d").toordinal() for d in dates_str],
+        dtype=float,
+    )
+
+    t = dates_ord - dates_ord[0]
+    omega = 2.0 * np.pi / 365.25
+    A = np.column_stack([
+        t,
+        np.ones_like(t),
+        np.sin(omega * t),
+        np.cos(omega * t),
+        np.sin(2 * omega * t),
+        np.cos(2 * omega * t),
+    ])
+    coeffs, _, _, _ = np.linalg.lstsq(A, values, rcond=None)
+    seasonal = A[:, 2:] @ coeffs[2:]
+    deseason = values - seasonal
+
+    half = len(deseason) // 2
+    slope, intercept = np.polyfit(t[:half], deseason[:half], 1)
+    detrended = deseason - (slope * t + intercept)
+
+    from scipy.signal import savgol_filter
+
+    win = min(11, len(detrended) - (1 if len(detrended) % 2 == 0 else 0))
+    if win < 5 or len(detrended) < min_points:
+        return None
+    dt_mean = float(np.mean(np.diff(t)))
+    vel = np.abs(
+        savgol_filter(detrended, window_length=win, polyorder=2, deriv=1, delta=dt_mean)
+    ) * 365.25
+
+    min_idx = int(np.argmin(vel))
+    noise_floor = np.max(vel) * 0.05
+    start = min_idx
+    while start < len(vel) and vel[start] < noise_floor:
+        start += 1
+    vel_tail = vel[start:]
+    dates_tail = dates_ord[start:]
+    if len(vel_tail) < min_points:
+        return None
+
+    return fit_voight(dates_tail, vel_tail, min_points=min_points)
+
+
 def _apply_voight_analysis(
     flags: list[AnomalyFlag],
     accel_map: AccelerationMap,
@@ -853,46 +909,49 @@ def _apply_voight_analysis(
     """
     Apply Voight's failure law analysis to flagged sites.
 
-    For each flag, extracts the velocity time series at the peak
-    anomaly pixel and fits the inverse-velocity linear trend.
+    For each flag, first tries fitting from the displacement timeseries
+    (cleaner signal). Falls back to the acceleration map's velocity
+    residuals if timeseries data is unavailable.
     """
     min_points = voight_config.get("min_points", 5)
+    r2_threshold = voight_config.get("r_squared_threshold", 0.7)
 
     for flag in flags:
-        # Get velocity time series at peak pixel location
-        peak_row = flag.pixel_indices[
-            np.argmax(np.abs(
-                accel_map.acceleration_zscore[
-                    flag.window_index,
-                    flag.pixel_indices[:, 0],
-                    flag.pixel_indices[:, 1],
-                ]
-            ))
-        ]
-        row, col = peak_row
+        result = None
 
-        velocities = accel_map.velocity_residual[:, row, col]
-        dates = accel_map.window_centers
+        if flag.timeseries and len(flag.timeseries.get("values", [])) >= min_points + 4:
+            result = _voight_from_timeseries(flag.timeseries, min_points)
 
-        result = fit_voight(dates, np.abs(velocities), min_points=min_points)
-        if result is not None:
-            r2_threshold = voight_config.get("r_squared_threshold", 0.7)
-            if result["r_squared"] >= r2_threshold:
-                flag.voight_fit = result
-                # Boost score for flags with Voight fit
-                flag.score *= 1.5
-                window = result.get("failure_window_days", [None, None])
-                window_str = ""
-                if window[0] is not None and window[1] is not None:
-                    window_str = f" (95%% CI: {window[0]:.0f}–{window[1]:.0f} days)"
-                logger.info(
-                    "  Flag %d: Voight fit R²=%.2f, predicted failure %s "
-                    "(%.0f days from last obs)%s",
-                    flag.flag_id,
-                    result["r_squared"],
-                    result.get("predicted_failure_iso", "?"),
-                    result["days_until_failure"],
-                    window_str,
-                )
+        if result is None and flag.window_index < accel_map.acceleration_zscore.shape[0]:
+            peak_row = flag.pixel_indices[
+                np.argmax(np.abs(
+                    accel_map.acceleration_zscore[
+                        flag.window_index,
+                        flag.pixel_indices[:, 0],
+                        flag.pixel_indices[:, 1],
+                    ]
+                ))
+            ]
+            row, col = peak_row
+            velocities = accel_map.velocity_residual[:, row, col]
+            dates = accel_map.window_centers
+            result = fit_voight(dates, np.abs(velocities), min_points=min_points)
+
+        if result is not None and result["r_squared"] >= r2_threshold:
+            flag.voight_fit = result
+            flag.score *= 1.5
+            window = result.get("failure_window_days", [None, None])
+            window_str = ""
+            if window[0] is not None and window[1] is not None:
+                window_str = f" (95%% CI: {window[0]:.0f}–{window[1]:.0f} days)"
+            logger.info(
+                "  Flag %d: Voight fit R²=%.2f, predicted failure %s "
+                "(%.0f days from last obs)%s",
+                flag.flag_id,
+                result["r_squared"],
+                result.get("predicted_failure_iso", "?"),
+                result["days_until_failure"],
+                window_str,
+            )
 
     return flags

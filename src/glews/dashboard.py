@@ -38,7 +38,7 @@ SEVERITY_WARNING_THRESHOLD = 2.5
 # Analyst classification choices (distinct from severity)
 VALID_CLASSIFICATIONS = {"Watch", "Warning", "Cleared"}
 
-_USER_AGENT = "GLEWS/0.1 (glacier-monitoring)"
+_USER_AGENT = "GLEWS/0.1 (glacier-landslide-warning; https://github.com/glews)"
 _API_TIMEOUT = 10
 
 
@@ -114,6 +114,15 @@ def load_flags(data_dir: str | Path) -> list[dict]:
             flags = raw
         elif isinstance(raw, dict) and "flags" in raw:
             flags = raw["flags"]
+
+    for f in flags:
+        if "voight_r2" in f and "voight_fit" not in f:
+            f["voight_fit"] = {
+                "r_squared": f["voight_r2"],
+                "days_to_failure": f.get("voight_days_to_failure"),
+                "predicted_failure_date": f.get("predicted_failure_date"),
+                "failure_window": f.get("failure_window"),
+            }
 
     # Derive severity for every flag
     for f in flags:
@@ -200,16 +209,20 @@ def _cached_call(key: str, func, *args, ttl: int = 300):
 def _get_elevation(lat: float, lon: float) -> dict:
     """Query 3x3 DEM grid around point, compute slope and aspect."""
     delta = 0.001  # ~111 m spacing
-    locs = []
+    lats = []
+    lons = []
     for dy in [-1, 0, 1]:
         for dx in [-1, 0, 1]:
-            locs.append(f"{lat + dy * delta},{lon + dx * delta}")
+            lats.append(str(round(lat + dy * delta, 6)))
+            lons.append(str(round(lon + dx * delta, 6)))
     url = (
-        "https://api.open-elevation.com/api/v1/lookup?locations="
-        + "|".join(locs)
+        "https://api.open-meteo.com/v1/elevation?latitude="
+        + ",".join(lats)
+        + "&longitude="
+        + ",".join(lons)
     )
     data = _fetch_json(url, timeout=15)
-    e = [r["elevation"] for r in data["results"]]
+    e = data["elevation"]
 
     # Grid indices (row-major, south to north):
     # 0=SW  1=S   2=SE
@@ -239,41 +252,129 @@ def _get_elevation(lat: float, lon: float) -> dict:
     }
 
 
+_OVERPASS_ENDPOINTS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+]
+
+
+_NOMINATIM_CACHE: dict[str, list[dict]] = {}
+
+
+def _nominatim_fallback(lat: float, lon: float, radius_km: int = 20) -> list[dict]:
+    """Find nearby settlements via Nominatim when Overpass is down."""
+    grid_key = f"{lat:.1f},{lon:.1f}"
+    if grid_key in _NOMINATIM_CACHE:
+        cached = _NOMINATIM_CACHE[grid_key]
+        return [
+            {**f, "distance_km": round(_haversine(lat, lon, f["lat"], f["lon"]), 2)}
+            for f in cached
+            if _haversine(lat, lon, f["lat"], f["lon"]) <= radius_km
+        ]
+
+    delta = radius_km / 111.0
+    features: list[dict] = []
+    seen: set[str] = set()
+
+    def _add(name: str, ftype: str, flat: float, flon: float):
+        key = f"{name}:{flat:.3f}"
+        if key in seen or not name:
+            return
+        seen.add(key)
+        features.append({
+            "name": name, "type": ftype,
+            "lat": round(flat, 4), "lon": round(flon, 4),
+            "distance_km": 0.0,
+        })
+
+    try:
+        url = (
+            "https://nominatim.openstreetmap.org/search?format=jsonv2"
+            f"&q=village&viewbox={lon - delta},{lat + delta},{lon + delta},{lat - delta}"
+            "&bounded=1&limit=50&accept-language=en"
+        )
+        data = _fetch_json(url, timeout=10)
+        for p in data:
+            ptype = p.get("type", "village")
+            if ptype in ("administrative", "county", "state", "country"):
+                continue
+            _add(p.get("name", ""), ptype,
+                 float(p.get("lat", 0)), float(p.get("lon", 0)))
+    except Exception as exc:
+        logger.info("Nominatim search failed: %s", exc)
+
+    offsets = [(-0.08, -0.08), (-0.08, 0.08), (0, 0),
+               (0.08, -0.08), (0.08, 0.08)]
+    for dlat, dlon in offsets:
+        rlat, rlon = lat + dlat, lon + dlon
+        try:
+            url = (
+                "https://nominatim.openstreetmap.org/reverse?format=jsonv2"
+                f"&lat={rlat}&lon={rlon}&zoom=16&accept-language=en"
+            )
+            time.sleep(1.05)
+            data = _fetch_json(url, timeout=10)
+            rtype = data.get("type", "")
+            if rtype not in ("administrative", "county", "state", "country", ""):
+                _add(data.get("name", ""), rtype,
+                     float(data.get("lat", 0)), float(data.get("lon", 0)))
+        except Exception:
+            pass
+
+    _NOMINATIM_CACHE[grid_key] = features
+    return [
+        {**f, "distance_km": round(_haversine(lat, lon, f["lat"], f["lon"]), 2)}
+        for f in features
+        if _haversine(lat, lon, f["lat"], f["lon"]) <= radius_km
+    ]
+
+
 def _get_exposure(lat: float, lon: float) -> dict:
-    """Query Overpass for settlements and infrastructure within 10 km."""
-    radius_m = 10000
+    """Query Overpass for settlements/infrastructure; Nominatim fallback."""
+    radius_m = 20000
     query = (
-        f"[out:json][timeout:10];\n"
+        f"[out:json][timeout:25];\n"
         f"(\n"
         f'  node["place"~"village|town|city|hamlet"](around:{radius_m},{lat},{lon});\n'
         f'  node["amenity"~"hospital|school"](around:{radius_m},{lat},{lon});\n'
         f");\n"
         f"out body;"
     )
-    url = "https://overpass-api.de/api/interpreter"
     post_data = urllib.parse.urlencode({"data": query}).encode()
-    result = _fetch_json(url, data=post_data, timeout=15)
+    result = None
+    for url in _OVERPASS_ENDPOINTS:
+        try:
+            result = _fetch_json(url, data=post_data, timeout=10)
+            break
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            logger.info("Overpass %s failed: %s", url.split("/")[2], exc)
 
     features = []
-    for elem in result.get("elements", []):
-        tags = elem.get("tags", {})
-        name = tags.get("name", tags.get("place", tags.get("amenity", "unknown")))
-        feat_type = tags.get("place") or tags.get("amenity") or "unknown"
-        el_lat = elem.get("lat")
-        el_lon = elem.get("lon")
-        if el_lat is None or el_lon is None:
-            continue
-        dist = _haversine(lat, lon, el_lat, el_lon)
-        features.append({
-            "name": name,
-            "type": feat_type,
-            "lat": round(el_lat, 4),
-            "lon": round(el_lon, 4),
-            "distance_km": round(dist, 2),
-        })
+    if result is not None:
+        for elem in result.get("elements", []):
+            tags = elem.get("tags", {})
+            name = tags.get("name", tags.get("place", tags.get("amenity", "unknown")))
+            feat_type = tags.get("place") or tags.get("amenity") or "unknown"
+            el_lat = elem.get("lat")
+            el_lon = elem.get("lon")
+            if el_lat is None or el_lon is None:
+                continue
+            dist = _haversine(lat, lon, el_lat, el_lon)
+            features.append({
+                "name": name,
+                "type": feat_type,
+                "lat": round(el_lat, 4),
+                "lon": round(el_lon, 4),
+                "distance_km": round(dist, 2),
+            })
+    else:
+        features = _nominatim_fallback(lat, lon)
+        if not features:
+            return {"radius_km": 20, "features": [], "unavailable": True}
 
     features.sort(key=lambda x: x["distance_km"])
-    return {"radius_km": 10, "features": features[:20]}
+    return {"radius_km": 20, "features": features[:20]}
 
 
 def _get_sentinel2(lat: float, lon: float) -> dict:
@@ -792,12 +893,27 @@ function renderVoightPanel(flag) {
         return;
     }
     var v = flag.voight_fit;
+    var daysFromToday = null;
+    if (v.predicted_failure_date) {
+        var failMs = new Date(v.predicted_failure_date + 'T00:00:00').getTime();
+        var nowMs = new Date().setHours(0,0,0,0);
+        daysFromToday = Math.round((failMs - nowMs) / 86400000);
+    }
+    var daysLabel = 'N/A';
+    if (daysFromToday != null) {
+        daysLabel = daysFromToday > 0 ? daysFromToday : Math.abs(daysFromToday) + ' ago';
+    }
     var html = '<div class="panel-grid">';
-    html += panelMetric('Days to Failure', v.days_to_failure != null ? Math.round(v.days_to_failure) : 'N/A', '');
+    html += panelMetric('Days to Failure', daysLabel, '');
     html += panelMetric('Fit R²', v.r_squared != null ? v.r_squared.toFixed(3) : 'N/A', '');
-    html += panelMetric('Alpha', v.alpha != null ? v.alpha.toFixed(2) : 'N/A', '');
+    html += panelMetric('Failure Date', v.predicted_failure_date || 'N/A', '');
     html += '</div>';
-    if (v.days_to_failure != null && v.days_to_failure < 30) {
+    if (v.failure_window) {
+        html += '<div style="font-size:12px;color:#636e72;margin-top:8px;">95% confidence window: ' + escapeHtml(v.failure_window) + '</div>';
+    }
+    if (daysFromToday != null && daysFromToday <= 0) {
+        html += '<div class="escalation-banner">Projected failure date has passed — immediate field verification required</div>';
+    } else if (daysFromToday != null && daysFromToday <= 30) {
         html += '<div class="escalation-banner">Projected failure within 30 days — escalation recommended</div>';
     }
     el.innerHTML = html;
@@ -846,6 +962,10 @@ function renderWeatherPanel(data, el) {
 }
 
 function renderExposurePanel(data, el) {
+    if (data.unavailable) {
+        el.innerHTML = '<div class="panel-empty">Overpass API unavailable — settlement data could not be loaded.<br><span style="font-size:12px;color:#636e72;">Try reloading the page later.</span></div>';
+        return;
+    }
     if (!data.features || data.features.length === 0) {
         el.innerHTML = '<div class="panel-empty">No settlements or infrastructure found within ' + (data.radius_km || 10) + ' km</div>';
         return;
