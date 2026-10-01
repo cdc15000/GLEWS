@@ -319,7 +319,10 @@ def demo(output: str, no_plots: bool) -> None:
         n_harmonics=det_cfg.get("n_harmonics", 2),
     )
 
-    flags = detect_anomalies(accel_map, ts.latitude, ts.longitude, cfg)
+    flags = detect_anomalies(
+        accel_map, ts.latitude, ts.longitude, cfg,
+        dates=ts.dates, displacement=ts.displacement,
+    )
     click.echo(f"  Detected {len(flags)} anomaly flags")
     click.echo()
 
