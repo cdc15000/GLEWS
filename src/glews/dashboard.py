@@ -154,6 +154,8 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GLEWS Tier 2 Analyst Dashboard</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; height: 100vh; background: #f5f6fa; color: #2d3436; }
@@ -199,6 +201,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .metric .label { font-size: 11px; text-transform: uppercase; color: #636e72; letter-spacing: 0.5px; margin-bottom: 4px; }
 .metric .value { font-size: 20px; font-weight: 700; color: #2d3436; }
 .metric .unit { font-size: 12px; color: #636e72; margin-left: 2px; }
+
+/* Map */
+.map-container { margin-bottom: 20px; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); overflow: hidden; }
+.map-container h3 { font-size: 16px; padding: 16px 24px 10px; color: #2d3436; border-bottom: 1px solid #dfe6e9; margin: 0; }
+#flagMap { height: 300px; }
 
 /* Chart area */
 .chart-container { margin-top: 16px; padding: 16px; background: #f5f6fa; border-radius: 6px; text-align: center; }
@@ -324,7 +331,8 @@ function renderDetail(flagId) {
     var accel = f.acceleration_mm_yr2;
     var accelStr = (accel != null) ? accel.toFixed(2) + ' mm/yr²' : 'N/A';
 
-    var html = '<div class="detail-card">';
+    var html = '<div class="map-container"><h3>Location</h3><div id="flagMap"></div></div>';
+    html += '<div class="detail-card">';
     html += '<h3>Flag ' + f.flag_id + ' — ' + formatCoord(f.center_lat, f.center_lon);
     html += ' <span class="severity-badge severity-' + f.severity + '">' + f.severity + '</span></h3>';
     html += '<div class="metrics-grid">';
@@ -371,6 +379,33 @@ function renderDetail(flagId) {
 
     body.innerHTML = html;
     document.getElementById('mainTitle').textContent = 'Flag ' + flagId + ' — Detail View';
+    initMap(f);
+}
+
+var dashMap = null;
+function initMap(flag) {
+    if (flag.center_lat == null || flag.center_lon == null) return;
+    if (dashMap) { dashMap.remove(); dashMap = null; }
+    dashMap = L.map('flagMap').setView([flag.center_lat, flag.center_lon], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 18
+    }).addTo(dashMap);
+    var sevColors = {CRITICAL: '#d63031', WARNING: '#fdcb6e', INFO: '#74b9ff'};
+    // Show all flags as small circles
+    for (var i = 0; i < FLAGS.length; i++) {
+        var fl = FLAGS[i];
+        if (fl.center_lat == null || fl.center_lon == null) continue;
+        var col = sevColors[fl.severity] || '#636e72';
+        var isSelected = (fl.flag_id === flag.flag_id);
+        L.circleMarker([fl.center_lat, fl.center_lon], {
+            radius: isSelected ? 10 : 5,
+            color: isSelected ? '#fff' : col,
+            weight: isSelected ? 3 : 1,
+            fillColor: col,
+            fillOpacity: isSelected ? 0.9 : 0.5
+        }).addTo(dashMap).bindPopup('Flag ' + fl.flag_id + ' (' + fl.severity + ')');
+    }
 }
 
 function escapeHtml(s) {
