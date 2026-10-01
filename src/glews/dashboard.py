@@ -17,9 +17,14 @@ import logging
 import math
 import os
 import tempfile
-from datetime import datetime, timezone
+import threading
+import time
+import urllib.parse
+import urllib.request
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +37,9 @@ SEVERITY_WARNING_THRESHOLD = 2.5
 
 # Analyst classification choices (distinct from severity)
 VALID_CLASSIFICATIONS = {"Watch", "Warning", "Cleared"}
+
+_USER_AGENT = "GLEWS/0.1 (glacier-monitoring)"
+_API_TIMEOUT = 10
 
 
 def _severity_from_score(score: float) -> str:
@@ -52,6 +60,20 @@ def _sanitize_for_json(value):
     if isinstance(value, list):
         return [_sanitize_for_json(v) for v in value]
     return value
+
+
+def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in km between two points."""
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(dlon / 2) ** 2
+    )
+    return R * 2 * math.asin(math.sqrt(a))
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +166,213 @@ def save_state(state_path: str | Path, state: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# External API helpers
+# ---------------------------------------------------------------------------
+
+_api_cache: dict[str, tuple[object, float]] = {}
+_cache_lock = threading.Lock()
+
+
+def _fetch_json(url: str, *, data: bytes | None = None,
+                headers: dict | None = None, timeout: int = _API_TIMEOUT):
+    """Fetch JSON from a URL with identifying User-Agent."""
+    hdrs = {"User-Agent": _USER_AGENT}
+    if headers:
+        hdrs.update(headers)
+    req = urllib.request.Request(url, data=data, headers=hdrs)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode())
+
+
+def _cached_call(key: str, func, *args, ttl: int = 300):
+    """Return cached result or call func and cache for ttl seconds."""
+    with _cache_lock:
+        if key in _api_cache:
+            result, ts = _api_cache[key]
+            if time.time() - ts < ttl:
+                return result
+    result = func(*args)
+    with _cache_lock:
+        _api_cache[key] = (result, time.time())
+    return result
+
+
+def _get_elevation(lat: float, lon: float) -> dict:
+    """Query 3x3 DEM grid around point, compute slope and aspect."""
+    delta = 0.001  # ~111 m spacing
+    locs = []
+    for dy in [-1, 0, 1]:
+        for dx in [-1, 0, 1]:
+            locs.append(f"{lat + dy * delta},{lon + dx * delta}")
+    url = (
+        "https://api.open-elevation.com/api/v1/lookup?locations="
+        + "|".join(locs)
+    )
+    data = _fetch_json(url, timeout=15)
+    e = [r["elevation"] for r in data["results"]]
+
+    # Grid indices (row-major, south to north):
+    # 0=SW  1=S   2=SE
+    # 3=W   4=C   5=E
+    # 6=NW  7=N   8=NE
+    cell_x = delta * 111320.0 * math.cos(math.radians(lat))
+    cell_y = delta * 110540.0
+
+    # Horn's method
+    dz_dx = ((e[2] + 2 * e[5] + e[8]) - (e[0] + 2 * e[3] + e[6])) / (8 * cell_x)
+    dz_dy = ((e[6] + 2 * e[7] + e[8]) - (e[0] + 2 * e[1] + e[2])) / (8 * cell_y)
+
+    slope_deg = math.degrees(math.atan(math.sqrt(dz_dx ** 2 + dz_dy ** 2)))
+    aspect_math = math.degrees(math.atan2(-dz_dy, dz_dx))
+    if aspect_math < 0:
+        aspect_math += 360
+    aspect_compass = (90 - aspect_math) % 360
+
+    dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+    aspect_dir = dirs[int((aspect_compass + 22.5) % 360 / 45)]
+
+    return {
+        "elevation_m": round(e[4], 1),
+        "slope_deg": round(slope_deg, 1),
+        "aspect_deg": round(aspect_compass, 1),
+        "aspect_dir": aspect_dir,
+    }
+
+
+def _get_exposure(lat: float, lon: float) -> dict:
+    """Query Overpass for settlements and infrastructure within 10 km."""
+    radius_m = 10000
+    query = (
+        f"[out:json][timeout:10];\n"
+        f"(\n"
+        f'  node["place"~"village|town|city|hamlet"](around:{radius_m},{lat},{lon});\n'
+        f'  node["amenity"~"hospital|school"](around:{radius_m},{lat},{lon});\n'
+        f");\n"
+        f"out body;"
+    )
+    url = "https://overpass-api.de/api/interpreter"
+    post_data = urllib.parse.urlencode({"data": query}).encode()
+    result = _fetch_json(url, data=post_data, timeout=15)
+
+    features = []
+    for elem in result.get("elements", []):
+        tags = elem.get("tags", {})
+        name = tags.get("name", tags.get("place", tags.get("amenity", "unknown")))
+        feat_type = tags.get("place") or tags.get("amenity") or "unknown"
+        el_lat = elem.get("lat")
+        el_lon = elem.get("lon")
+        if el_lat is None or el_lon is None:
+            continue
+        dist = _haversine(lat, lon, el_lat, el_lon)
+        features.append({
+            "name": name,
+            "type": feat_type,
+            "lat": round(el_lat, 4),
+            "lon": round(el_lon, 4),
+            "distance_km": round(dist, 2),
+        })
+
+    features.sort(key=lambda x: x["distance_km"])
+    return {"radius_km": 10, "features": features[:20]}
+
+
+def _get_sentinel2(lat: float, lon: float) -> dict:
+    """Query Element84 STAC for recent Sentinel-2 scenes."""
+    bbox_delta = 0.02
+    bbox = [lon - bbox_delta, lat - bbox_delta, lon + bbox_delta, lat + bbox_delta]
+    now = datetime.now(timezone.utc)
+    start = (now - timedelta(days=30)).strftime("%Y-%m-%dT00:00:00Z")
+    end = now.strftime("%Y-%m-%dT23:59:59Z")
+
+    payload = json.dumps({
+        "collections": ["sentinel-2-l2a"],
+        "bbox": bbox,
+        "datetime": f"{start}/{end}",
+        "limit": 5,
+        "sortby": [{"field": "properties.datetime", "direction": "desc"}],
+    }).encode()
+
+    result = _fetch_json(
+        "https://earth-search.aws.element84.com/v1/search",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        timeout=_API_TIMEOUT,
+    )
+
+    scenes = []
+    for feat in result.get("features", [])[:5]:
+        props = feat.get("properties", {})
+        dt = props.get("datetime", "")[:10]
+        cloud = props.get("eo:cloud_cover")
+        scenes.append({
+            "date": dt,
+            "cloud_pct": round(cloud, 1) if cloud is not None else None,
+        })
+
+    return {
+        "total_scenes": result.get("numberMatched", 0),
+        "scenes": scenes,
+    }
+
+
+def _get_weather(lat: float, lon: float) -> dict:
+    """Query Open-Meteo for current weather conditions."""
+    url = (
+        f"https://api.open-meteo.com/v1/forecast?"
+        f"latitude={lat}&longitude={lon}"
+        f"&current=temperature_2m,relative_humidity_2m,"
+        f"precipitation,wind_speed_10m,cloud_cover"
+        f"&timezone=auto"
+    )
+    data = _fetch_json(url)
+    current = data.get("current", {})
+    return {
+        "temperature": current.get("temperature_2m"),
+        "humidity": current.get("relative_humidity_2m"),
+        "wind_speed": current.get("wind_speed_10m"),
+        "cloud_cover": current.get("cloud_cover"),
+        "precipitation": current.get("precipitation"),
+    }
+
+
+def _get_history(lat: float, lon: float, data_dir: Path) -> dict:
+    """Scan monitor_state for prior flags within 1 km of this location."""
+    state_dir = data_dir / "monitor_state"
+    if not state_dir.exists():
+        return {"message": "No prior monitoring runs found", "prior_flags": []}
+
+    prior = []
+    for fpath in sorted(state_dir.glob("*.geojson")):
+        try:
+            raw = json.loads(fpath.read_text())
+            for feat in raw.get("features", []):
+                props = feat.get("properties", {})
+                coords = feat.get("geometry", {}).get("coordinates", [None, None])
+                if coords[0] is None or coords[1] is None:
+                    continue
+                dist_km = _haversine(lat, lon, coords[1], coords[0])
+                if dist_km < 1.0:
+                    score = props.get("score", 0)
+                    sev = props.get("risk_level", "")
+                    if sev:
+                        sev = sev.upper()
+                    else:
+                        sev = _severity_from_score(score)
+                    prior.append({
+                        "date": fpath.stem,
+                        "score": score,
+                        "severity": sev,
+                        "distance_m": round(dist_km * 1000, 1),
+                        "flag_id": props.get("flag_id"),
+                    })
+        except (json.JSONDecodeError, OSError):
+            continue
+
+    prior.sort(key=lambda x: x["date"], reverse=True)
+    return {"prior_flags": prior[:20]}
+
+
+# ---------------------------------------------------------------------------
 # HTML template
 # ---------------------------------------------------------------------------
 # Uses $$PLACEHOLDER$$ tokens to avoid conflicts with CSS/JS braces.
@@ -211,6 +440,25 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .chart-container { margin-top: 16px; padding: 16px; background: #f5f6fa; border-radius: 6px; text-align: center; }
 .chart-container .no-data { color: #636e72; font-size: 14px; padding: 40px; }
 
+/* Info panels */
+.info-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+.info-panel { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); overflow: hidden; }
+.info-panel h3 { font-size: 14px; padding: 12px 16px; border-bottom: 1px solid #dfe6e9; color: #2d3436; margin: 0; display: flex; align-items: center; gap: 8px; }
+.info-panel h3 .panel-icon { font-size: 16px; opacity: 0.7; }
+.panel-content { padding: 16px; min-height: 80px; }
+.panel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+.panel-metric { text-align: center; padding: 8px; background: #f5f6fa; border-radius: 4px; }
+.panel-metric .pm-label { font-size: 10px; text-transform: uppercase; color: #636e72; letter-spacing: 0.5px; margin-bottom: 2px; }
+.panel-metric .pm-value { font-size: 16px; font-weight: 700; color: #2d3436; }
+.panel-metric .pm-unit { font-size: 11px; color: #636e72; }
+.panel-loading { color: #636e72; font-size: 13px; padding: 20px 0; text-align: center; }
+.panel-error { color: #d63031; font-size: 13px; padding: 8px 0; }
+.panel-empty { color: #636e72; font-size: 13px; padding: 8px 0; }
+.panel-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+.panel-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid #dfe6e9; font-size: 11px; text-transform: uppercase; color: #636e72; letter-spacing: 0.3px; }
+.panel-table td { padding: 6px 8px; border-bottom: 1px solid #f5f6fa; }
+.escalation-banner { background: #d63031; color: #fff; padding: 8px 12px; border-radius: 4px; margin-top: 10px; font-size: 13px; font-weight: 600; }
+
 /* Analyst actions */
 .actions-card { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 24px; }
 .actions-card h3 { font-size: 16px; margin-bottom: 16px; color: #2d3436; border-bottom: 1px solid #dfe6e9; padding-bottom: 10px; }
@@ -231,6 +479,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #636e72; }
 .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
 .empty-state p { font-size: 16px; }
+
+@media (max-width: 900px) {
+    .info-panels { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
@@ -322,6 +574,20 @@ function selectFlag(flagId) {
     renderDetail(flagId);
 }
 
+function escapeHtml(s) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(s));
+    return div.innerHTML;
+}
+
+function metric(label, value, unit) {
+    return '<div class="metric"><div class="label">' + label + '</div><div class="value">' + value + '<span class="unit">' + unit + '</span></div></div>';
+}
+
+function panelMetric(label, value, unit) {
+    return '<div class="panel-metric"><div class="pm-label">' + escapeHtml(String(label)) + '</div><div class="pm-value">' + escapeHtml(String(value)) + '<span class="pm-unit">' + escapeHtml(String(unit)) + '</span></div></div>';
+}
+
 function renderDetail(flagId) {
     var f = FLAGS.find(function(x) { return x.flag_id === flagId; });
     if (!f) return;
@@ -355,6 +621,24 @@ function renderDetail(flagId) {
     html += '</div>';
     html += '</div>';
 
+    // --- Info panels row 1: Voight + Elevation ---
+    html += '<div class="info-panels">';
+    html += '<div class="info-panel"><h3><span class="panel-icon">&#9888;</span> Failure Forecast (Voight)</h3><div class="panel-content" id="panel-voight"></div></div>';
+    html += '<div class="info-panel"><h3><span class="panel-icon">&#9650;</span> Elevation &amp; Slope</h3><div class="panel-content" id="panel-elevation"></div></div>';
+    html += '</div>';
+
+    // --- Info panels row 2: Sentinel-2 + Weather ---
+    html += '<div class="info-panels">';
+    html += '<div class="info-panel"><h3><span class="panel-icon">&#128752;</span> Sentinel-2 Optical</h3><div class="panel-content" id="panel-sentinel2"></div></div>';
+    html += '<div class="info-panel"><h3><span class="panel-icon">&#9729;</span> Current Weather</h3><div class="panel-content" id="panel-weather"></div></div>';
+    html += '</div>';
+
+    // --- Info panels row 3: Exposure + History ---
+    html += '<div class="info-panels">';
+    html += '<div class="info-panel"><h3><span class="panel-icon">&#127968;</span> Downstream Exposure</h3><div class="panel-content" id="panel-exposure"></div></div>';
+    html += '<div class="info-panel"><h3><span class="panel-icon">&#128197;</span> Flag History</h3><div class="panel-content" id="panel-history"></div></div>';
+    html += '</div>';
+
     // Actions card
     html += '<div class="actions-card">';
     html += '<h3>Analyst Classification</h3>';
@@ -380,19 +664,37 @@ function renderDetail(flagId) {
     body.innerHTML = html;
     document.getElementById('mainTitle').textContent = 'Flag ' + flagId + ' — Detail View';
     initMap(f);
+
+    // Populate panels
+    renderVoightPanel(f);
+    if (f.center_lat != null && f.center_lon != null) {
+        loadPanel('elevation', f.center_lat, f.center_lon);
+        loadPanel('sentinel2', f.center_lat, f.center_lon);
+        loadPanel('weather', f.center_lat, f.center_lon);
+        loadPanel('exposure', f.center_lat, f.center_lon);
+        loadPanel('history', f.center_lat, f.center_lon);
+    }
 }
 
+// ---- Map with basemap toggle ----
 var dashMap = null;
 function initMap(flag) {
     if (flag.center_lat == null || flag.center_lon == null) return;
     if (dashMap) { dashMap.remove(); dashMap = null; }
-    dashMap = L.map('flagMap').setView([flag.center_lat, flag.center_lon], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
+
+    var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
         maxZoom: 18
-    }).addTo(dashMap);
+    });
+    var satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '© Esri',
+        maxZoom: 18
+    });
+
+    dashMap = L.map('flagMap', { layers: [osm] }).setView([flag.center_lat, flag.center_lon], 13);
+    L.control.layers({ 'Street': osm, 'Satellite': satellite }).addTo(dashMap);
+
     var sevColors = {CRITICAL: '#d63031', WARNING: '#fdcb6e', INFO: '#74b9ff'};
-    // Show all flags as small circles
     for (var i = 0; i < FLAGS.length; i++) {
         var fl = FLAGS[i];
         if (fl.center_lat == null || fl.center_lon == null) continue;
@@ -408,16 +710,152 @@ function initMap(flag) {
     }
 }
 
-function escapeHtml(s) {
-    var div = document.createElement('div');
-    div.appendChild(document.createTextNode(s));
-    return div.innerHTML;
+// ---- Async panel loading ----
+function loadPanel(panel, lat, lon) {
+    var el = document.getElementById('panel-' + panel);
+    if (!el) return;
+    el.innerHTML = '<div class="panel-loading">Loading…</div>';
+    var requestedFlag = selectedFlagId;
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/api/' + panel + '?lat=' + lat + '&lon=' + lon, true);
+    xhr.timeout = 20000;
+    xhr.onload = function() {
+        if (selectedFlagId !== requestedFlag) return;
+        if (xhr.status === 200) {
+            try {
+                var data = JSON.parse(xhr.responseText);
+                renderPanelData(panel, data, el);
+            } catch (e) {
+                el.innerHTML = '<div class="panel-error">Parse error</div>';
+            }
+        } else {
+            el.innerHTML = '<div class="panel-error">Failed to load (' + xhr.status + ')</div>';
+        }
+    };
+    xhr.onerror = function() {
+        if (selectedFlagId !== requestedFlag) return;
+        el.innerHTML = '<div class="panel-error">Network error</div>';
+    };
+    xhr.ontimeout = function() {
+        if (selectedFlagId !== requestedFlag) return;
+        el.innerHTML = '<div class="panel-error">Request timed out</div>';
+    };
+    xhr.send();
 }
 
-function metric(label, value, unit) {
-    return '<div class="metric"><div class="label">' + label + '</div><div class="value">' + value + '<span class="unit">' + unit + '</span></div></div>';
+function renderPanelData(panel, data, el) {
+    if (data.error) {
+        el.innerHTML = '<div class="panel-error">' + escapeHtml(data.error) + '</div>';
+        return;
+    }
+    switch (panel) {
+        case 'elevation': renderElevationPanel(data, el); break;
+        case 'sentinel2': renderSentinelPanel(data, el); break;
+        case 'weather': renderWeatherPanel(data, el); break;
+        case 'exposure': renderExposurePanel(data, el); break;
+        case 'history': renderHistoryPanel(data, el); break;
+        default: el.innerHTML = '<div class="panel-empty">Unknown panel</div>';
+    }
 }
 
+// ---- Panel renderers ----
+
+function renderVoightPanel(flag) {
+    var el = document.getElementById('panel-voight');
+    if (!el) return;
+    if (!flag.voight_fit || flag.voight_fit.r_squared == null) {
+        el.innerHTML = '<div class="panel-empty">No Voight analysis available.<br><span style="font-size:12px;">Run the full pipeline with time-series export to enable failure forecasting.</span></div>';
+        return;
+    }
+    var v = flag.voight_fit;
+    var html = '<div class="panel-grid">';
+    html += panelMetric('Days to Failure', v.days_to_failure != null ? Math.round(v.days_to_failure) : 'N/A', '');
+    html += panelMetric('Fit R²', v.r_squared != null ? v.r_squared.toFixed(3) : 'N/A', '');
+    html += panelMetric('Alpha', v.alpha != null ? v.alpha.toFixed(2) : 'N/A', '');
+    html += '</div>';
+    if (v.days_to_failure != null && v.days_to_failure < 30) {
+        html += '<div class="escalation-banner">Projected failure within 30 days — escalation recommended</div>';
+    }
+    el.innerHTML = html;
+}
+
+function renderElevationPanel(data, el) {
+    var html = '<div class="panel-grid">';
+    html += panelMetric('Elevation', data.elevation_m, 'm');
+    html += panelMetric('Slope', data.slope_deg, '°');
+    html += panelMetric('Aspect', data.aspect_deg + '° ' + data.aspect_dir, '');
+    html += '</div>';
+    el.innerHTML = html;
+}
+
+function renderSentinelPanel(data, el) {
+    if (!data.scenes || data.scenes.length === 0) {
+        el.innerHTML = '<div class="panel-empty">No recent Sentinel-2 scenes found</div>';
+        return;
+    }
+    var html = '<div class="panel-grid">';
+    html += panelMetric('Latest Scene', data.scenes[0].date, '');
+    html += panelMetric('Cloud Cover', data.scenes[0].cloud_pct != null ? data.scenes[0].cloud_pct : 'N/A', '%');
+    html += panelMetric('Scenes (30d)', data.total_scenes, '');
+    html += '</div>';
+    if (data.scenes.length > 1) {
+        html += '<div style="font-size:12px;color:#636e72;margin-top:10px;">Recent scenes: ';
+        for (var i = 0; i < Math.min(data.scenes.length, 5); i++) {
+            if (i > 0) html += ', ';
+            html += escapeHtml(data.scenes[i].date);
+            if (data.scenes[i].cloud_pct != null) html += ' (' + data.scenes[i].cloud_pct + '%)';
+        }
+        html += '</div>';
+    }
+    el.innerHTML = html;
+}
+
+function renderWeatherPanel(data, el) {
+    var html = '<div class="panel-grid">';
+    html += panelMetric('Temp', data.temperature != null ? data.temperature : 'N/A', '°C');
+    html += panelMetric('Humidity', data.humidity != null ? data.humidity : 'N/A', '%');
+    html += panelMetric('Wind', data.wind_speed != null ? data.wind_speed : 'N/A', ' km/h');
+    html += panelMetric('Clouds', data.cloud_cover != null ? data.cloud_cover : 'N/A', '%');
+    html += panelMetric('Precip', data.precipitation != null ? data.precipitation : 'N/A', ' mm');
+    html += '</div>';
+    el.innerHTML = html;
+}
+
+function renderExposurePanel(data, el) {
+    if (!data.features || data.features.length === 0) {
+        el.innerHTML = '<div class="panel-empty">No settlements or infrastructure found within ' + (data.radius_km || 10) + ' km</div>';
+        return;
+    }
+    var html = '<div style="font-size:11px;color:#636e72;margin-bottom:8px;">Within ' + data.radius_km + ' km (straight-line, not flow-routed)</div>';
+    html += '<table class="panel-table"><tr><th>Name</th><th>Type</th><th>Dist</th></tr>';
+    for (var i = 0; i < data.features.length; i++) {
+        var feat = data.features[i];
+        html += '<tr><td>' + escapeHtml(feat.name) + '</td>';
+        html += '<td style="color:#636e72;">' + escapeHtml(feat.type) + '</td>';
+        html += '<td>' + feat.distance_km.toFixed(1) + ' km</td></tr>';
+    }
+    html += '</table>';
+    el.innerHTML = html;
+}
+
+function renderHistoryPanel(data, el) {
+    if (!data.prior_flags || data.prior_flags.length === 0) {
+        el.innerHTML = '<div class="panel-empty">' + escapeHtml(data.message || 'No prior flags found at this location') + '</div>';
+        return;
+    }
+    var html = '<table class="panel-table"><tr><th>Date</th><th>Score</th><th>Severity</th><th>Dist</th></tr>';
+    for (var i = 0; i < data.prior_flags.length; i++) {
+        var pf = data.prior_flags[i];
+        html += '<tr><td>' + escapeHtml(pf.date) + '</td>';
+        html += '<td>' + (pf.score != null ? pf.score.toFixed(2) : 'N/A') + '</td>';
+        html += '<td><span class="severity-badge severity-' + escapeHtml(pf.severity) + '">' + escapeHtml(pf.severity) + '</span></td>';
+        html += '<td>' + pf.distance_m.toFixed(0) + ' m</td></tr>';
+    }
+    html += '</table>';
+    el.innerHTML = html;
+}
+
+// ---- Timeseries SVG ----
 function renderTimeseriesSVG(dates, values, flagId) {
     var w = 700, h = 200, pad = 50;
     var n = dates.length;
@@ -429,10 +867,8 @@ function renderTimeseriesSVG(dates, values, flagId) {
     vmin -= margin; vmax += margin;
 
     var svg = '<svg viewBox="0 0 ' + (w + 2 * pad) + ' ' + (h + 2 * pad) + '" style="max-width:100%;height:auto;">';
-    // Axes
     svg += '<line x1="' + pad + '" y1="' + (h + pad) + '" x2="' + (w + pad) + '" y2="' + (h + pad) + '" stroke="#636e72" stroke-width="1"/>';
     svg += '<line x1="' + pad + '" y1="' + pad + '" x2="' + pad + '" y2="' + (h + pad) + '" stroke="#636e72" stroke-width="1"/>';
-    // Y-axis labels
     for (var y = 0; y <= 4; y++) {
         var yv = vmin + (vmax - vmin) * y / 4;
         var yp = h + pad - (y / 4) * h;
@@ -441,7 +877,6 @@ function renderTimeseriesSVG(dates, values, flagId) {
         svg += '<text x="' + (pad - 5) + '" y="' + yp + '" text-anchor="end" font-size="10" fill="#636e72">' + yv.toFixed(dp) + '</text>';
         svg += '<line x1="' + pad + '" y1="' + yp + '" x2="' + (w + pad) + '" y2="' + yp + '" stroke="#dfe6e9" stroke-width="0.5"/>';
     }
-    // Data line
     var points = '';
     for (var i = 0; i < n; i++) {
         var x = pad + (i / (n - 1)) * w;
@@ -449,13 +884,11 @@ function renderTimeseriesSVG(dates, values, flagId) {
         points += x + ',' + yVal + ' ';
     }
     svg += '<polyline points="' + points.trim() + '" fill="none" stroke="#0984e3" stroke-width="2"/>';
-    // Data points
     for (var i = 0; i < n; i++) {
         var x = pad + (i / (n - 1)) * w;
         var yVal = h + pad - ((values[i] - vmin) / (vmax - vmin)) * h;
         svg += '<circle cx="' + x + '" cy="' + yVal + '" r="3" fill="#0984e3"/>';
     }
-    // X-axis labels (first, middle, last)
     var xLabels = [0, Math.floor(n / 2), n - 1];
     for (var k = 0; k < xLabels.length; k++) {
         var idx = xLabels[k];
@@ -468,6 +901,7 @@ function renderTimeseriesSVG(dates, values, flagId) {
     return svg;
 }
 
+// ---- Classify + notes ----
 function classify(flagId, classification) {
     var fid = String(flagId);
     var note = '';
@@ -535,22 +969,81 @@ def make_handler(
     Factory that returns a BaseHTTPRequestHandler subclass bound to
     the given flags and state.  Avoids module-level globals.
     """
+    state_lock = threading.Lock()
+    data_dir = state_path.parent
 
     class DashboardHandler(BaseHTTPRequestHandler):
 
         def do_GET(self):
-            if self.path == "/" or self.path == "/index.html":
+            parsed = urlparse(self.path)
+            path = parsed.path
+            params = parse_qs(parsed.query)
+
+            if path in ("/", "/index.html"):
                 html = _render_html(flags, state, site_name)
                 self._respond(200, "text/html; charset=utf-8", html.encode("utf-8"))
-            elif self.path == "/api/flags":
+
+            elif path == "/api/flags":
                 merged = _merge_flags_state(flags, state)
                 body = json.dumps(merged)
                 self._respond(200, "application/json", body.encode())
+
+            elif path == "/api/elevation":
+                self._handle_geo_api(params, lambda lat, lon: _cached_call(
+                    f"elev:{lat:.4f},{lon:.4f}", _get_elevation, lat, lon
+                ))
+
+            elif path == "/api/exposure":
+                self._handle_geo_api(params, lambda lat, lon: _cached_call(
+                    f"expo:{lat:.4f},{lon:.4f}", _get_exposure, lat, lon,
+                    ttl=600,
+                ))
+
+            elif path == "/api/sentinel2":
+                self._handle_geo_api(params, lambda lat, lon: _cached_call(
+                    f"s2:{lat:.2f},{lon:.2f}", _get_sentinel2, lat, lon,
+                    ttl=600,
+                ))
+
+            elif path == "/api/weather":
+                self._handle_geo_api(params, lambda lat, lon: _cached_call(
+                    f"wx:{lat:.2f},{lon:.2f}", _get_weather, lat, lon,
+                    ttl=300,
+                ))
+
+            elif path == "/api/history":
+                self._handle_geo_api(params, lambda lat, lon: _cached_call(
+                    f"hist:{lat:.4f},{lon:.4f}", _get_history, lat, lon, data_dir,
+                    ttl=60,
+                ))
+
             else:
                 self._respond(404, "text/plain", b"Not Found")
 
+        def _handle_geo_api(self, params, handler):
+            try:
+                lat = float(params["lat"][0])
+                lon = float(params["lon"][0])
+            except (KeyError, IndexError, ValueError):
+                self._respond(
+                    400, "application/json",
+                    json.dumps({"error": "lat and lon required"}).encode(),
+                )
+                return
+            try:
+                result = handler(lat, lon)
+                body = json.dumps(result)
+                self._respond(200, "application/json", body.encode())
+            except Exception as exc:
+                logger.warning("API error for %s: %s", self.path, exc)
+                body = json.dumps({"error": str(exc)})
+                self._respond(502, "application/json", body.encode())
+
         def do_POST(self):
-            if self.path == "/api/classify":
+            parsed = urlparse(self.path)
+            path = parsed.path
+
+            if path == "/api/classify":
                 length = int(self.headers.get("Content-Length", 0))
                 raw = self.rfile.read(length)
                 try:
@@ -590,8 +1083,9 @@ def make_handler(
                         "%Y-%m-%d %H:%M UTC"
                     ),
                 }
-                state[fid] = entry
-                save_state(state_path, state)
+                with state_lock:
+                    state[fid] = entry
+                    save_state(state_path, state)
 
                 self._respond(
                     200, "application/json", json.dumps(entry).encode()
@@ -639,7 +1133,12 @@ def serve(data_dir: str, port: int, config: dict) -> None:
     state = load_state(state_path)
 
     handler_cls = make_handler(flags, state, state_path, site_name)
-    server = HTTPServer(("127.0.0.1", port), handler_cls)
+
+    try:
+        from http.server import ThreadingHTTPServer
+        server = ThreadingHTTPServer(("127.0.0.1", port), handler_cls)
+    except ImportError:
+        server = HTTPServer(("127.0.0.1", port), handler_cls)
 
     logger.info(
         "Dashboard serving %d flags at http://127.0.0.1:%d/", len(flags), port
