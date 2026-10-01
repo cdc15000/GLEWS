@@ -394,6 +394,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .sidebar-header { padding: 20px; border-bottom: 1px solid #485460; }
 .sidebar-header h1 { font-size: 18px; color: #fff; margin-bottom: 4px; }
 .sidebar-header .site-name { font-size: 13px; color: #b2bec3; }
+.sidebar-stats { padding: 12px 20px; border-bottom: 1px solid #485460; display: flex; gap: 12px; }
+.sidebar-stats .stat { text-align: center; flex: 1; }
+.sidebar-stats .stat-value { font-size: 20px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+.sidebar-stats .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #636e72; }
+.sidebar-stats .stat-value.critical { color: #d63031; }
+.sidebar-stats .stat-value.warning { color: #fdcb6e; }
+.sidebar-stats .stat-value.info { color: #74b9ff; }
 .sidebar-filter { padding: 12px 20px; border-bottom: 1px solid #485460; display: flex; gap: 6px; }
 .sidebar-filter button { padding: 4px 10px; border: 1px solid #636e72; border-radius: 4px; background: transparent; color: #b2bec3; cursor: pointer; font-size: 12px; }
 .sidebar-filter button.active { background: #0984e3; border-color: #0984e3; color: #fff; }
@@ -491,6 +498,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
         <h1>GLEWS Dashboard</h1>
         <div class="site-name" id="siteName">$$SITE_NAME$$</div>
     </div>
+    <div class="sidebar-stats" id="sidebarStats"></div>
     <div class="sidebar-filter">
         <button class="active" onclick="filterFlags('ALL')">All</button>
         <button onclick="filterFlags('CRITICAL')">Critical</button>
@@ -555,6 +563,22 @@ function renderFlagList() {
         html = '<div style="padding:30px 20px;color:#636e72;text-align:center;">No flags match this filter</div>';
     }
     list.innerHTML = html;
+}
+
+function renderStats() {
+    var total = FLAGS.length;
+    var crit = 0, warn = 0, info = 0;
+    for (var i = 0; i < FLAGS.length; i++) {
+        if (FLAGS[i].severity === 'CRITICAL') crit++;
+        else if (FLAGS[i].severity === 'WARNING') warn++;
+        else info++;
+    }
+    var el = document.getElementById('sidebarStats');
+    el.innerHTML =
+        '<div class="stat"><div class="stat-value">' + total + '</div><div class="stat-label">Total</div></div>' +
+        '<div class="stat"><div class="stat-value critical">' + crit + '</div><div class="stat-label">Critical</div></div>' +
+        '<div class="stat"><div class="stat-value warning">' + warn + '</div><div class="stat-label">Warning</div></div>' +
+        '<div class="stat"><div class="stat-value info">' + info + '</div><div class="stat-label">Info</div></div>';
 }
 
 function formatArea(a) {
@@ -940,6 +964,7 @@ function showSaved() {
 }
 
 // Initial render
+renderStats();
 renderFlagList();
 </script>
 </body>
