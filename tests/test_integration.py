@@ -1,4 +1,4 @@
-"""End-to-end integration tests for the GEWS pipeline.
+"""End-to-end integration tests for the GLEWS pipeline.
 
 Each test exercises multiple modules together using only synthetic data
 --- no network access, no real satellite products.

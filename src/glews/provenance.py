@@ -1,5 +1,5 @@
 """
-Data provenance and audit logging for the GEWS pipeline.
+Data provenance and audit logging for the GLEWS pipeline.
 
 Tracks every action the system performs — data downloads, detection
 runs, alert dispatches — with enough detail to reconstruct the chain
@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ProvenanceRecord:
-    """A single auditable action performed by the GEWS pipeline."""
+    """A single auditable action performed by the GLEWS pipeline."""
 
     timestamp: str
     action: str

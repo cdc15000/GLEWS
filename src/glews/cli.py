@@ -1,5 +1,5 @@
 """
-GEWS command-line interface.
+GLEWS command-line interface.
 
 Usage:
     glews search   --config CONFIG     Search for available Sentinel-1 scenes
@@ -61,7 +61,7 @@ def _load_config(config_path: str) -> dict:
 @click.group()
 @click.option("-v", "--verbose", is_flag=True, help="Verbose logging")
 def main(verbose: bool) -> None:
-    """GEWS — Glacier Early Warning System for unstable glacier detection."""
+    """GLEWS - Glacier Early Warning System for unstable glacier detection."""
     _setup_logging(verbose)
 
 
@@ -238,7 +238,7 @@ def assess(config: str) -> None:
 @click.option("--no-plots", is_flag=True, help="Skip generating plots")
 def demo(output: str, no_plots: bool) -> None:
     """
-    Run the full GEWS pipeline on synthetic data.
+    Run the full GLEWS pipeline on synthetic data.
 
     Generates a realistic synthetic InSAR scene with an injected
     pre-failure acceleration signal, then runs Tier 0 detection
@@ -254,7 +254,7 @@ def demo(output: str, no_plots: bool) -> None:
     from glews.timeseries import compute_acceleration_map
 
     click.echo("=" * 60)
-    click.echo("GEWS Demo — Synthetic Nepal 2026 Scenario")
+    click.echo("GLEWS Demo — Synthetic Nepal 2026 Scenario")
     click.echo("=" * 60)
     click.echo()
 
@@ -508,7 +508,7 @@ def info() -> None:
 
     from glews import __version__
 
-    click.echo(f"GEWS v{__version__}")
+    click.echo(f"GLEWS v{__version__}")
     click.echo(f"Python {sys.version}")
     click.echo()
 
@@ -618,7 +618,7 @@ def version() -> None:
     """Show version information."""
     from glews import __version__
 
-    click.echo(f"GEWS v{__version__}")
+    click.echo(f"GLEWS v{__version__}")
     click.echo("Glacier Early Warning System — PoC InSAR Pipeline")
 
 

@@ -1,5 +1,5 @@
 """
-Configuration validation for GEWS.
+Configuration validation for GLEWS.
 
 Validates site configuration files against expected structure, types,
 value ranges, and cross-field consistency rules.
@@ -136,7 +136,7 @@ def _deep_copy_dict(d: dict) -> dict:
 
 
 def validate_config(config: dict) -> list[str]:
-    """Validate a GEWS configuration dict.
+    """Validate a GLEWS configuration dict.
 
     Returns a list of diagnostic strings.  Each starts with ``ERROR:``
     or ``WARNING:`` so callers can distinguish blocking issues from

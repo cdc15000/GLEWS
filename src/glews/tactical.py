@@ -1,5 +1,5 @@
 """
-Seismic/infrasound tactical warning integration for GEWS.
+Seismic/infrasound tactical warning integration for GLEWS.
 
 Once strategic monitoring (InSAR anomaly detection) flags a site as
 high-risk, tactical sensors — seismometers and infrasound arrays near
@@ -200,7 +200,7 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 class TacticalWarningSystem:
-    """Integrates seismic/infrasound detections with the GEWS strategic
+    """Integrates seismic/infrasound detections with the GLEWS strategic
     warning pipeline to issue tactical (seconds-to-minutes) alerts for
     downstream communities when collapse begins.
 

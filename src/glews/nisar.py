@@ -2,7 +2,7 @@
 NISAR data loading module.
 
 Reads NISAR L2 GUNW (unwrapped interferograms) and GOFF (offset fields)
-HDF5 products and converts them into formats compatible with the GEWS
+HDF5 products and converts them into formats compatible with the GLEWS
 detection pipeline.
 
 NISAR L-band (24 cm wavelength) maintains coherence on glaciated surfaces

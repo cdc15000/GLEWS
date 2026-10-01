@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for GEWS tests.
+"""Shared pytest fixtures for GLEWS tests.
 
 All fixtures produce purely synthetic data — no real HDF5/NISAR products
 or network access are required to run the test suite.

@@ -1,5 +1,5 @@
 """
-Performance benchmarking for the GEWS pipeline.
+Performance benchmarking for the GLEWS pipeline.
 
 Measures throughput and memory usage at different scales to estimate
 global screening time for ~215,000 glaciers.  Each benchmark generates
@@ -313,7 +313,7 @@ class PipelineBenchmark:
 
         lines: list[str] = []
         lines.append("")
-        lines.append("GEWS Pipeline Performance Benchmarks")
+        lines.append("GLEWS Pipeline Performance Benchmarks")
         lines.append("=" * 72)
 
         header = (

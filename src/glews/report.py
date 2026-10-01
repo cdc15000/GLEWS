@@ -295,7 +295,7 @@ def _export_geojson(
         "type": "FeatureCollection",
         "features": features,
         "properties": {
-            "name": "GEWS Tier 0/1 Flags",
+            "name": "GLEWS Tier 0/1 Flags",
             "generated": datetime.utcnow().isoformat() + "Z",
             "n_flags": len(flags),
         },
@@ -327,7 +327,7 @@ def _write_summary(
 ) -> None:
     """Write a Markdown summary report."""
     lines = [
-        f"# GEWS Analysis Report — {config['site']['name']}",
+        f"# GLEWS Analysis Report — {config['site']['name']}",
         "",
         f"**Generated:** {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
         f"**Event date:** {config['site']['event_date']}",
@@ -388,7 +388,7 @@ def _write_summary(
     lines.extend([
         "",
         "---",
-        f"*GEWS v0.1.0 — Configuration: {config['site']['name']}*",
+        f"*GLEWS v0.1.0 — Configuration: {config['site']['name']}*",
     ])
 
     path.write_text("\n".join(lines))

@@ -129,7 +129,7 @@ class TestGenerateReport:
         bench = PipelineBenchmark()
         bench.benchmark_timeseries(n_pixels_list=[100], n_dates=15)
         report = bench.generate_report()
-        assert "GEWS Pipeline Performance Benchmarks" in report
+        assert "GLEWS Pipeline Performance Benchmarks" in report
         assert "Stage" in report
         assert "timeseries" in report
         assert "px/s" in report

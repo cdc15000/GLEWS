@@ -1,6 +1,6 @@
 """
 Tier 2 analyst review dashboard — lightweight web UI for glaciologists
-to review flagged sites from the GEWS anomaly detection pipeline.
+to review flagged sites from the GLEWS anomaly detection pipeline.
 
 Serves a single-page HTML dashboard using only Python's built-in
 http.server module. No additional dependencies required beyond the
@@ -153,7 +153,7 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GEWS Tier 2 Analyst Dashboard</title>
+<title>GLEWS Tier 2 Analyst Dashboard</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; height: 100vh; background: #f5f6fa; color: #2d3436; }
@@ -229,7 +229,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <body>
 <div class="sidebar">
     <div class="sidebar-header">
-        <h1>GEWS Dashboard</h1>
+        <h1>GLEWS Dashboard</h1>
         <div class="site-name" id="siteName">$$SITE_NAME$$</div>
     </div>
     <div class="sidebar-filter">
@@ -598,7 +598,7 @@ def serve(data_dir: str, port: int, config: dict) -> None:
     data_path = Path(data_dir)
     state_path = data_path / "dashboard_state.json"
 
-    site_name = config.get("site", {}).get("name", "GEWS Site")
+    site_name = config.get("site", {}).get("name", "GLEWS Site")
 
     flags = load_flags(data_path)
     state = load_state(state_path)
@@ -609,7 +609,7 @@ def serve(data_dir: str, port: int, config: dict) -> None:
     logger.info(
         "Dashboard serving %d flags at http://127.0.0.1:%d/", len(flags), port
     )
-    print(f"GEWS Tier 2 Dashboard — {site_name}")
+    print(f"GLEWS Tier 2 Dashboard - {site_name}")
     print(f"Serving {len(flags)} flags at http://127.0.0.1:{port}/")
     print("Press Ctrl+C to stop.\n")
 

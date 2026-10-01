@@ -1,5 +1,5 @@
 """
-GEWS — Glacier Early Warning System
+GLEWS - Glacier Early Warning System
 
 Proof-of-concept InSAR pipeline for satellite detection of unstable
 glaciers and rock slopes, with anomaly detection and cascade risk

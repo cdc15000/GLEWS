@@ -1,5 +1,5 @@
 """
-Operational monitoring module — turns the retrospective GEWS pipeline
+Operational monitoring module — turns the retrospective GLEWS pipeline
 into a standing watch over configured glacier/rock-slope sites.
 
 Design notes (read before touching the SBAS/z-score code paths):

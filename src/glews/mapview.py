@@ -1,5 +1,5 @@
 """
-Interactive GeoJSON map viewer for GEWS anomaly flags.
+Interactive GeoJSON map viewer for GLEWS anomaly flags.
 
 Serves a Leaflet.js-based map showing color-coded markers for each
 flagged site, with popups containing anomaly details, severity-based
@@ -71,7 +71,7 @@ MAP_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GEWS Map Viewer</title>
+<title>GLEWS Map Viewer</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
 /* Leaflet CSS — inlined from leaflet 1.9.4 */
@@ -458,7 +458,7 @@ def serve(data_dir: str | Path = "output", port: int = 8050) -> None:
     server = HTTPServer(("", port), handler_cls)
     logger.info("Map viewer serving at http://localhost:%d", port)
     logger.info("Data directory: %s", data_dir)
-    print(f"GEWS Map Viewer running at http://localhost:{port}")
+    print(f"GLEWS Map Viewer running at http://localhost:{port}")
     print(f"Data directory: {data_dir}")
     print("Press Ctrl+C to stop.")
     try:

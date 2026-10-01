@@ -1,5 +1,5 @@
 """
-Tier 1 multi-sensor cross-check filters for GEWS anomaly flags.
+Tier 1 multi-sensor cross-check filters for GLEWS anomaly flags.
 
 Cross-checks InSAR anomalies against interferometric quality metrics
 and (when available) optical imagery to eliminate false positives
