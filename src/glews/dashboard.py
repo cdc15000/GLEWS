@@ -567,6 +567,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .panel-table td { padding: 6px 8px; border-bottom: 1px solid #f5f6fa; }
 .escalation-banner { background: #d63031; color: #fff; padding: 8px 12px; border-radius: 4px; margin-top: 10px; font-size: 13px; font-weight: 600; }
 
+/* Response protocol */
+.response-protocol { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 24px; border-left: 4px solid #d63031; }
+.response-protocol h3 { font-size: 16px; margin-bottom: 16px; color: #d63031; border-bottom: 1px solid #dfe6e9; padding-bottom: 10px; }
+.protocol-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.protocol-btn { padding: 10px 18px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.protocol-btn:hover { filter: brightness(0.9); }
+.btn-notify { background: #0984e3; color: #fff; }
+.btn-evacuate { background: #d63031; color: #fff; }
+.draft-output { margin-top: 16px; background: #f5f6fa; border-radius: 6px; padding: 16px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; font-family: -apple-system, BlinkMacSystemFont, sans-serif; position: relative; max-height: 400px; overflow-y: auto; }
+.draft-output .draft-header { font-weight: 700; font-size: 14px; margin-bottom: 8px; color: #2d3436; }
+.copy-btn { position: absolute; top: 8px; right: 8px; padding: 4px 12px; border: 1px solid #dfe6e9; border-radius: 4px; background: #fff; font-size: 12px; cursor: pointer; }
+.copy-btn:hover { background: #dfe6e9; }
+
 /* Analyst actions */
 .actions-card { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 24px; }
 .actions-card h3 { font-size: 16px; margin-bottom: 16px; color: #2d3436; border-bottom: 1px solid #dfe6e9; padding-bottom: 10px; }
@@ -625,6 +638,7 @@ var FLAGS = $$FLAGS_JSON$$;
 var STATE = $$STATE_JSON$$;
 var currentFilter = 'ALL';
 var selectedFlagId = null;
+var cachedExposure = null;
 
 function filterFlags(severity) {
     currentFilter = severity;
@@ -764,6 +778,16 @@ function renderDetail(flagId) {
     html += '<div class="info-panel"><h3><span class="panel-icon">&#128197;</span> Flag History</h3><div class="panel-content" id="panel-history"></div></div>';
     html += '</div>';
 
+    // Response protocol (shown when Voight escalation triggers)
+    html += '<div class="response-protocol" id="responseProtocol" style="display:none;">';
+    html += '<h3>Response Protocol</h3>';
+    html += '<div class="protocol-actions">';
+    html += '<button class="protocol-btn btn-notify" onclick="draftNotification()">Draft Authority Notification</button>';
+    html += '<button class="protocol-btn btn-evacuate" onclick="draftEvacuation()">Draft Evacuation Advisory</button>';
+    html += '</div>';
+    html += '<div id="draftOutput"></div>';
+    html += '</div>';
+
     // Actions card
     html += '<div class="actions-card">';
     html += '<h3>Analyst Classification</h3>';
@@ -843,7 +867,7 @@ function loadPanel(panel, lat, lon) {
     var requestedFlag = selectedFlagId;
     var xhr = new XMLHttpRequest();
     xhr.open('GET', '/api/' + panel + '?lat=' + lat + '&lon=' + lon, true);
-    xhr.timeout = 20000;
+    xhr.timeout = 45000;
     xhr.onload = function() {
         if (selectedFlagId !== requestedFlag) return;
         if (xhr.status === 200) {
@@ -917,6 +941,7 @@ function renderVoightPanel(flag) {
         html += '<div class="escalation-banner">Projected failure within 30 days — escalation recommended</div>';
     }
     el.innerHTML = html;
+    updateProtocolVisibility();
 }
 
 function renderElevationPanel(data, el) {
@@ -962,6 +987,8 @@ function renderWeatherPanel(data, el) {
 }
 
 function renderExposurePanel(data, el) {
+    cachedExposure = data;
+    updateProtocolVisibility();
     if (data.unavailable) {
         el.innerHTML = '<div class="panel-empty">Overpass API unavailable — settlement data could not be loaded.<br><span style="font-size:12px;color:#636e72;">Try reloading the page later.</span></div>';
         return;
@@ -997,6 +1024,186 @@ function renderHistoryPanel(data, el) {
     }
     html += '</table>';
     el.innerHTML = html;
+}
+
+// ---- Response Protocol ----
+
+function updateProtocolVisibility() {
+    var el = document.getElementById('responseProtocol');
+    if (!el) return;
+    var f = FLAGS.find(function(x) { return x.flag_id === selectedFlagId; });
+    if (!f || !f.voight_fit || !f.voight_fit.predicted_failure_date) { el.style.display = 'none'; return; }
+    var failMs = new Date(f.voight_fit.predicted_failure_date + 'T00:00:00').getTime();
+    var nowMs = new Date().setHours(0,0,0,0);
+    var daysFromToday = Math.round((failMs - nowMs) / 86400000);
+    el.style.display = (daysFromToday <= 30) ? '' : 'none';
+}
+
+function getSelectedFlag() {
+    return FLAGS.find(function(x) { return x.flag_id === selectedFlagId; });
+}
+
+function formatSettlementList(features) {
+    if (!features || features.length === 0) return '  (No settlement data available)\n';
+    var txt = '';
+    for (var i = 0; i < features.length; i++) {
+        var f = features[i];
+        txt += '  - ' + f.name + ' (' + f.type + '), ' + f.distance_km.toFixed(1) + ' km from hazard zone\n';
+    }
+    return txt;
+}
+
+function draftNotification() {
+    var f = getSelectedFlag();
+    if (!f) return;
+    var v = f.voight_fit || {};
+    var today = new Date().toISOString().slice(0, 10);
+    var failMs = new Date(v.predicted_failure_date + 'T00:00:00').getTime();
+    var nowMs = new Date().setHours(0,0,0,0);
+    var daysFromToday = Math.round((failMs - nowMs) / 86400000);
+    var urgency = daysFromToday <= 0 ? 'IMMEDIATE' : 'URGENT';
+
+    var settlements = cachedExposure && cachedExposure.features ? cachedExposure.features : [];
+    var villageNames = [];
+    for (var i = 0; i < settlements.length; i++) {
+        if (settlements[i].type === 'village' || settlements[i].type === 'town' || settlements[i].type === 'city') {
+            villageNames.push(settlements[i].name);
+        }
+    }
+
+    var txt = '';
+    txt += urgency + ' — GLEWS Hazard Notification\n';
+    txt += '========================================\n\n';
+    txt += 'Date Issued: ' + today + '\n';
+    txt += 'Issuing System: GLEWS (Glacier and Landslide Early Warning System)\n';
+    txt += 'Hazard Type: Potential slope failure / mass movement\n\n';
+    txt += 'LOCATION\n';
+    txt += '  Coordinates: ' + f.center_lat.toFixed(4) + '°N, ' + f.center_lon.toFixed(4) + '°E\n';
+    txt += '  Region: Nyalam County, Shigatse Prefecture, Xizang\n';
+    txt += '  Flag ID: ' + f.flag_id + ' | Severity: ' + f.severity + '\n\n';
+    txt += 'HAZARD ASSESSMENT\n';
+    txt += '  Anomaly Score: ' + (f.score != null ? f.score.toFixed(2) : 'N/A') + '\n';
+    txt += '  Voight Fit R²: ' + (v.r_squared != null ? v.r_squared.toFixed(3) : 'N/A') + '\n';
+    txt += '  Predicted Failure Date: ' + (v.predicted_failure_date || 'N/A') + '\n';
+    txt += '  95% Confidence Window: ' + (v.failure_window || 'N/A') + '\n';
+    if (daysFromToday <= 0) {
+        txt += '  STATUS: Projected failure date has PASSED (' + Math.abs(daysFromToday) + ' days ago)\n';
+    } else {
+        txt += '  STATUS: Failure projected in ' + daysFromToday + ' days\n';
+    }
+    txt += '\nCOMMUNITIES WITHIN POTENTIAL IMPACT ZONE\n';
+    txt += formatSettlementList(settlements);
+    if (villageNames.length > 0) {
+        txt += '  Priority communities: ' + villageNames.slice(0, 5).join(', ') + '\n';
+    }
+    txt += '\nRECOMMENDED ACTIONS\n';
+    txt += '  1. Alert local disaster management authorities in Nyalam County\n';
+    txt += '  2. Commission immediate field reconnaissance of the hazard site\n';
+    txt += '  3. Establish communication with community leaders in affected villages\n';
+    txt += '  4. Pre-position emergency response resources if not already in place\n';
+    txt += '  5. Increase monitoring cadence (request additional SAR acquisitions)\n';
+    txt += '\nThis notification is generated from satellite-based InSAR analysis.\n';
+    txt += 'Field verification is required before public alert issuance.\n';
+
+    showDraft(txt);
+}
+
+function draftEvacuation() {
+    var f = getSelectedFlag();
+    if (!f) return;
+    var v = f.voight_fit || {};
+    var today = new Date().toISOString().slice(0, 10);
+    var failMs = new Date(v.predicted_failure_date + 'T00:00:00').getTime();
+    var nowMs = new Date().setHours(0,0,0,0);
+    var daysFromToday = Math.round((failMs - nowMs) / 86400000);
+
+    var settlements = cachedExposure && cachedExposure.features ? cachedExposure.features : [];
+    var zones = { immediate: [], warning: [], advisory: [] };
+    for (var i = 0; i < settlements.length; i++) {
+        var s = settlements[i];
+        if (s.type !== 'village' && s.type !== 'town' && s.type !== 'city' && s.type !== 'hamlet') continue;
+        if (s.distance_km <= 10) zones.immediate.push(s);
+        else if (s.distance_km <= 15) zones.warning.push(s);
+        else zones.advisory.push(s);
+    }
+
+    var txt = '';
+    txt += 'EVACUATION ADVISORY — DRAFT\n';
+    txt += '========================================\n\n';
+    txt += 'Date Prepared: ' + today + '\n';
+    txt += 'Prepared By: GLEWS Tier 2 Analyst (REQUIRES REVIEW)\n';
+    txt += 'Status: DRAFT — NOT FOR PUBLIC RELEASE\n\n';
+    txt += 'HAZARD SUMMARY\n';
+    txt += '  A potential slope failure has been identified at\n';
+    txt += '  ' + f.center_lat.toFixed(4) + '°N, ' + f.center_lon.toFixed(4) + '°E\n';
+    txt += '  via satellite InSAR displacement analysis.\n\n';
+    if (daysFromToday <= 0) {
+        txt += '  The projected failure date (' + v.predicted_failure_date + ') has PASSED.\n';
+        txt += '  The slope may be in an advanced failure state or the model\n';
+        txt += '  parameters may have shifted. Immediate field verification is critical.\n\n';
+    } else {
+        txt += '  Projected failure date: ' + v.predicted_failure_date + ' (' + daysFromToday + ' days from today)\n';
+        txt += '  Confidence window: ' + (v.failure_window || 'N/A') + '\n\n';
+    }
+    txt += 'AFFECTED ZONES\n\n';
+    if (zones.immediate.length > 0) {
+        txt += '  ZONE 1 — IMMEDIATE (< 10 km from hazard)\n';
+        txt += '  Action: Prepare for evacuation; await field verification\n';
+        for (var i = 0; i < zones.immediate.length; i++) {
+            txt += '    - ' + zones.immediate[i].name + ' (' + zones.immediate[i].distance_km.toFixed(1) + ' km)\n';
+        }
+        txt += '\n';
+    }
+    if (zones.warning.length > 0) {
+        txt += '  ZONE 2 — WARNING (10–15 km from hazard)\n';
+        txt += '  Action: Alert community leaders; identify evacuation routes\n';
+        for (var i = 0; i < zones.warning.length; i++) {
+            txt += '    - ' + zones.warning[i].name + ' (' + zones.warning[i].distance_km.toFixed(1) + ' km)\n';
+        }
+        txt += '\n';
+    }
+    if (zones.advisory.length > 0) {
+        txt += '  ZONE 3 — ADVISORY (15–20 km from hazard)\n';
+        txt += '  Action: Monitor situation; no immediate action required\n';
+        for (var i = 0; i < zones.advisory.length; i++) {
+            txt += '    - ' + zones.advisory[i].name + ' (' + zones.advisory[i].distance_km.toFixed(1) + ' km)\n';
+        }
+        txt += '\n';
+    }
+    txt += 'EVACUATION GUIDANCE\n';
+    txt += '  - Move AWAY from valley floors and drainage channels\n';
+    txt += '  - Move to higher ground perpendicular to potential flow path\n';
+    txt += '  - Avoid downstream river valleys — debris flows follow drainages\n';
+    txt += '  - Identified road: G318 (China National Highway 318) for evacuation routing\n\n';
+    txt += 'NEXT STEPS\n';
+    txt += '  1. Field team to verify ground conditions at hazard site\n';
+    txt += '  2. Local authority review and approval of this advisory\n';
+    txt += '  3. Translation into local languages before community distribution\n';
+    txt += '  4. Establish community communication channels\n\n';
+    txt += 'THIS IS A DRAFT PREPARED FROM REMOTE SENSING DATA.\n';
+    txt += 'IT MUST BE VERIFIED BY FIELD ASSESSMENT AND APPROVED BY\n';
+    txt += 'LOCAL DISASTER MANAGEMENT AUTHORITIES BEFORE DISTRIBUTION.\n';
+
+    showDraft(txt);
+}
+
+function showDraft(text) {
+    var el = document.getElementById('draftOutput');
+    if (!el) return;
+    var html = '<div class="draft-output">';
+    html += '<button class="copy-btn" onclick="copyDraft()">Copy</button>';
+    html += '<pre style="margin:0;white-space:pre-wrap;font-family:inherit;font-size:inherit;" id="draftText">' + escapeHtml(text) + '</pre>';
+    html += '</div>';
+    el.innerHTML = html;
+}
+
+function copyDraft() {
+    var el = document.getElementById('draftText');
+    if (!el) return;
+    navigator.clipboard.writeText(el.textContent).then(function() {
+        var btn = document.querySelector('.copy-btn');
+        if (btn) { btn.textContent = 'Copied'; setTimeout(function() { btn.textContent = 'Copy'; }, 2000); }
+    });
 }
 
 // ---- Timeseries SVG ----
