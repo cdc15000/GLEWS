@@ -277,30 +277,43 @@ def _nominatim_fallback(lat: float, lon: float, radius_km: int = 20) -> list[dic
     features: list[dict] = []
     seen: set[str] = set()
 
-    def _add(name: str, ftype: str, flat: float, flon: float):
+    def _add(name: str, ftype: str, flat: float, flon: float,
+             name_en: str = ""):
         key = f"{name}:{flat:.3f}"
         if key in seen or not name:
             return
         seen.add(key)
-        features.append({
+        entry = {
             "name": name, "type": ftype,
             "lat": round(flat, 4), "lon": round(flon, 4),
             "distance_km": 0.0,
-        })
+        }
+        if name_en and name_en != name:
+            entry["name_en"] = name_en
+        features.append(entry)
 
     try:
         url = (
             "https://nominatim.openstreetmap.org/search?format=jsonv2"
             f"&q=village&viewbox={lon - delta},{lat + delta},{lon + delta},{lat - delta}"
-            "&bounded=1&limit=50&accept-language=en"
+            "&bounded=1&limit=50&namedetails=1"
         )
         data = _fetch_json(url, timeout=10)
         for p in data:
             ptype = p.get("type", "village")
             if ptype in ("administrative", "county", "state", "country"):
                 continue
-            _add(p.get("name", ""), ptype,
-                 float(p.get("lat", 0)), float(p.get("lon", 0)))
+            nd = p.get("namedetails", {})
+            local_name = nd.get("name", p.get("name", ""))
+            en_name = (
+                nd.get("name:en")
+                or nd.get("name:zh-Latn-pinyin")
+                or nd.get("int_name")
+                or ""
+            )
+            _add(local_name, ptype,
+                 float(p.get("lat", 0)), float(p.get("lon", 0)),
+                 name_en=en_name)
     except Exception as exc:
         logger.info("Nominatim search failed: %s", exc)
 
@@ -311,14 +324,23 @@ def _nominatim_fallback(lat: float, lon: float, radius_km: int = 20) -> list[dic
         try:
             url = (
                 "https://nominatim.openstreetmap.org/reverse?format=jsonv2"
-                f"&lat={rlat}&lon={rlon}&zoom=16&accept-language=en"
+                f"&lat={rlat}&lon={rlon}&zoom=16&namedetails=1"
             )
             time.sleep(1.05)
             data = _fetch_json(url, timeout=10)
             rtype = data.get("type", "")
             if rtype not in ("administrative", "county", "state", "country", ""):
-                _add(data.get("name", ""), rtype,
-                     float(data.get("lat", 0)), float(data.get("lon", 0)))
+                nd = data.get("namedetails", {})
+                local_name = nd.get("name", data.get("name", ""))
+                en_name = (
+                    nd.get("name:en")
+                    or nd.get("name:zh-Latn-pinyin")
+                    or nd.get("int_name")
+                    or ""
+                )
+                _add(local_name, rtype,
+                     float(data.get("lat", 0)), float(data.get("lon", 0)),
+                     name_en=en_name)
         except Exception:
             pass
 
@@ -355,19 +377,28 @@ def _get_exposure(lat: float, lon: float) -> dict:
         for elem in result.get("elements", []):
             tags = elem.get("tags", {})
             name = tags.get("name", tags.get("place", tags.get("amenity", "unknown")))
+            name_en = (
+                tags.get("name:en")
+                or tags.get("name:zh-Latn-pinyin")
+                or tags.get("int_name")
+                or ""
+            )
             feat_type = tags.get("place") or tags.get("amenity") or "unknown"
             el_lat = elem.get("lat")
             el_lon = elem.get("lon")
             if el_lat is None or el_lon is None:
                 continue
             dist = _haversine(lat, lon, el_lat, el_lon)
-            features.append({
+            entry = {
                 "name": name,
                 "type": feat_type,
                 "lat": round(el_lat, 4),
                 "lon": round(el_lon, 4),
                 "distance_km": round(dist, 2),
-            })
+            }
+            if name_en and name_en != name:
+                entry["name_en"] = name_en
+            features.append(entry)
     else:
         features = _nominatim_fallback(lat, lon)
         if not features:
@@ -405,10 +436,15 @@ def _get_sentinel2(lat: float, lon: float) -> dict:
         props = feat.get("properties", {})
         dt = props.get("datetime", "")[:10]
         cloud = props.get("eo:cloud_cover")
-        scenes.append({
+        assets = feat.get("assets", {})
+        thumbnail = assets.get("thumbnail", {}).get("href")
+        scene = {
             "date": dt,
             "cloud_pct": round(cloud, 1) if cloud is not None else None,
-        })
+        }
+        if thumbnail:
+            scene["thumbnail"] = thumbnail
+        scenes.append(scene)
 
     return {
         "total_scenes": result.get("numberMatched", 0),
@@ -632,6 +668,177 @@ def _get_field_reports(lat: float, lon: float, data_dir: Path) -> dict:
     return {"reports": nearby[:10]}
 
 
+def _get_news(lat: float, lon: float, region: str = "") -> dict:
+    """Fetch related news from OpenAlex and Crossref."""
+    query_terms = "landslide glacier hazard"
+    if region:
+        query_terms += " " + region
+
+    articles: list[dict] = []
+
+    try:
+        q = urllib.parse.quote(query_terms)
+        url = (
+            f"https://api.openalex.org/works?search={q}"
+            "&per_page=5&sort=publication_date:desc"
+            "&select=title,doi,publication_date,primary_location"
+        )
+        data = _fetch_json(url, timeout=12)
+        for r in data.get("results", []):
+            title = r.get("title", "")
+            if not title:
+                continue
+            loc = r.get("primary_location") or {}
+            src = loc.get("source") or {}
+            articles.append({
+                "title": title,
+                "url": r.get("doi", ""),
+                "date": (r.get("publication_date") or "")[:10],
+                "source": src.get("display_name", ""),
+                "provider": "OpenAlex",
+            })
+    except Exception as exc:
+        logger.info("OpenAlex query failed: %s", exc)
+
+    try:
+        q = urllib.parse.quote(query_terms)
+        url = (
+            f"https://api.crossref.org/works?query={q}"
+            "&rows=5&sort=relevance&order=desc"
+            "&select=title,URL,published-print,container-title"
+        )
+        data = _fetch_json(url, timeout=12)
+        for it in data.get("message", {}).get("items", []):
+            title_list = it.get("title", [])
+            title = title_list[0] if title_list else ""
+            if not title:
+                continue
+            journal_list = it.get("container-title", [])
+            journal = journal_list[0] if journal_list else ""
+            pub = it.get("published-print") or it.get("published-online") or {}
+            parts = pub.get("date-parts", [[]])[0]
+            year = str(parts[0]) if parts else ""
+            articles.append({
+                "title": title,
+                "url": it.get("URL", ""),
+                "date": year,
+                "source": journal,
+                "provider": "Crossref",
+            })
+    except Exception as exc:
+        logger.info("Crossref query failed: %s", exc)
+
+    seen_titles: set[str] = set()
+    unique: list[dict] = []
+    for a in articles:
+        key = a["title"].lower()[:60]
+        if key not in seen_titles:
+            seen_titles.add(key)
+            unique.append(a)
+
+    return {"articles": unique[:8]}
+
+
+def _resolve_flag_place_names(flags: list[dict], data_dir: Path) -> None:
+    """Resolve nearest place name for each flag via one Overpass query.
+
+    Writes results to place_names.json and annotates flags in-place
+    with 'place_name' and 'place_name_en' keys.
+    """
+    cache_path = data_dir / "place_names.json"
+    cached: dict[str, dict] = {}
+    if cache_path.exists():
+        try:
+            cached = json.loads(cache_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            cached = {}
+
+    all_resolved = True
+    for f in flags:
+        fid = str(f.get("flag_id"))
+        if fid in cached:
+            f["place_name"] = cached[fid].get("name", "")
+            f["place_name_en"] = cached[fid].get("name_en", "")
+        else:
+            all_resolved = False
+
+    if all_resolved:
+        return
+
+    lats = [f["center_lat"] for f in flags
+            if f.get("center_lat") is not None]
+    lons = [f["center_lon"] for f in flags
+            if f.get("center_lon") is not None]
+    if not lats:
+        return
+
+    margin = 0.15
+    south, north = min(lats) - margin, max(lats) + margin
+    west, east = min(lons) - margin, max(lons) + margin
+
+    query = (
+        f"[out:json][timeout:30];\n"
+        f'node["place"~"village|town|city|hamlet"]'
+        f"({south},{west},{north},{east});\n"
+        f"out body;"
+    )
+    post_data = urllib.parse.urlencode({"data": query}).encode()
+    places: list[dict] = []
+    for url in _OVERPASS_ENDPOINTS:
+        try:
+            result = _fetch_json(url, data=post_data, timeout=30)
+            for elem in result.get("elements", []):
+                tags = elem.get("tags", {})
+                name = tags.get("name", "")
+                if not name:
+                    continue
+                name_en = (
+                    tags.get("name:en")
+                    or tags.get("name:zh-Latn-pinyin")
+                    or tags.get("int_name")
+                    or ""
+                )
+                places.append({
+                    "name": name,
+                    "name_en": name_en,
+                    "lat": elem["lat"],
+                    "lon": elem["lon"],
+                })
+            break
+        except Exception as exc:
+            logger.info("Overpass place name query failed (%s): %s",
+                        url.split("/")[2], exc)
+
+    if not places:
+        return
+
+    for f in flags:
+        fid = str(f.get("flag_id"))
+        if fid in cached:
+            continue
+        flat = f.get("center_lat")
+        flon = f.get("center_lon")
+        if flat is None or flon is None:
+            continue
+        best = None
+        best_dist = float("inf")
+        for p in places:
+            d = _haversine(flat, flon, p["lat"], p["lon"])
+            if d < best_dist:
+                best_dist = d
+                best = p
+        if best and best_dist < 30:
+            entry = {"name": best["name"], "name_en": best.get("name_en", "")}
+            cached[fid] = entry
+            f["place_name"] = entry["name"]
+            f["place_name_en"] = entry.get("name_en", "")
+
+    try:
+        cache_path.write_text(json.dumps(cached, ensure_ascii=False, indent=2))
+    except OSError as exc:
+        logger.warning("Could not write place_names.json: %s", exc)
+
+
 # ---------------------------------------------------------------------------
 # HTML template
 # ---------------------------------------------------------------------------
@@ -727,7 +934,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .escalation-banner { background: #d63031; color: #fff; padding: 8px 12px; border-radius: 4px; margin-top: 10px; font-size: 13px; font-weight: 600; }
 
 /* Response protocol */
-.response-protocol { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 24px; border-left: 4px solid #d63031; }
+.response-protocol { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 24px; border-left: 4px solid #d63031; margin-bottom: 20px; }
 .response-protocol h3 { font-size: 16px; margin-bottom: 16px; color: #d63031; border-bottom: 1px solid #dfe6e9; padding-bottom: 10px; }
 .protocol-actions { display: flex; gap: 12px; flex-wrap: wrap; }
 .protocol-btn { padding: 10px 18px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
@@ -851,6 +1058,11 @@ function renderFlagList() {
             html += '<span class="classification-badge classification-' + st.classification + '">' + st.classification + '</span>';
         }
         html += '</span></div>';
+        if (f.place_name) {
+            var placeLabel = escapeHtml(f.place_name);
+            if (f.place_name_en && f.place_name_en !== f.place_name) placeLabel += ' (' + escapeHtml(f.place_name_en) + ')';
+            html += '<div class="flag-meta" style="margin-bottom:2px;">' + placeLabel + '</div>';
+        }
         html += '<div class="flag-meta">Score: ' + (f.score != null ? f.score.toFixed(2) : 'N/A');
         html += ' &middot; Z: ' + (f.peak_zscore != null ? f.peak_zscore.toFixed(1) : 'N/A');
         html += ' &middot; ' + formatArea(f.area_m2) + '</div>';
@@ -921,7 +1133,13 @@ function renderDetail(flagId) {
 
     var html = '<div class="map-container"><h3>Location</h3><div id="flagMap"></div></div>';
     html += '<div class="detail-card">';
-    html += '<h3>Flag ' + f.flag_id + ' — ' + formatCoord(f.center_lat, f.center_lon);
+    var locationLabel = formatCoord(f.center_lat, f.center_lon);
+    if (f.place_name) {
+        var pn = escapeHtml(f.place_name);
+        if (f.place_name_en && f.place_name_en !== f.place_name) pn += ' (' + escapeHtml(f.place_name_en) + ')';
+        locationLabel = pn + ' — ' + locationLabel;
+    }
+    html += '<h3>Flag ' + f.flag_id + ' — ' + locationLabel;
     html += ' <span class="severity-badge severity-' + f.severity + '">' + f.severity + '</span></h3>';
     html += '<div class="metrics-grid">';
     html += metric('Anomaly Score', f.score != null ? f.score.toFixed(2) : 'N/A', '');
@@ -972,6 +1190,11 @@ function renderDetail(flagId) {
     html += '<div class="info-panel" style="grid-column: 1 / -1;"><h3><span class="panel-icon">&#128269;</span> Field Reconnaissance</h3><div class="panel-content" id="panel-fieldreports"></div></div>';
     html += '</div>';
 
+    // --- Info panels row 6: News Feed ---
+    html += '<div class="info-panels">';
+    html += '<div class="info-panel" style="grid-column: 1 / -1;"><h3><span class="panel-icon">&#128240;</span> News Feed</h3><div class="panel-content" id="panel-news"></div></div>';
+    html += '</div>';
+
     // Response protocol (shown when Voight escalation triggers)
     html += '<div class="response-protocol" id="responseProtocol" style="display:none;">';
     html += '<h3>Response Protocol</h3>';
@@ -1005,7 +1228,13 @@ function renderDetail(flagId) {
     html += '</div>';
 
     body.innerHTML = html;
-    document.getElementById('mainTitle').textContent = 'Flag ' + flagId + ' — Detail View';
+    var titleText = 'Flag ' + flagId;
+    if (f.place_name) {
+        titleText += ' — ' + f.place_name;
+        if (f.place_name_en && f.place_name_en !== f.place_name) titleText += ' (' + f.place_name_en + ')';
+    }
+    titleText += ' — Detail View';
+    document.getElementById('mainTitle').textContent = titleText;
     initMap(f);
 
     // Populate panels
@@ -1019,6 +1248,10 @@ function renderDetail(flagId) {
         loadPanel('monitoring', f.center_lat, f.center_lon);
         loadPanel('instruments', f.center_lat, f.center_lon);
         loadPanel('fieldreports', f.center_lat, f.center_lon);
+        var newsRegion = '';
+        if (f.place_name_en) newsRegion = f.place_name_en;
+        else if (f.place_name) newsRegion = f.place_name;
+        loadPanel('news', f.center_lat, f.center_lon, newsRegion);
     }
 }
 
@@ -1057,13 +1290,15 @@ function initMap(flag) {
 }
 
 // ---- Async panel loading ----
-function loadPanel(panel, lat, lon) {
+function loadPanel(panel, lat, lon, region) {
     var el = document.getElementById('panel-' + panel);
     if (!el) return;
     el.innerHTML = '<div class="panel-loading">Loading…</div>';
     var requestedFlag = selectedFlagId;
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', '/api/' + panel + '?lat=' + lat + '&lon=' + lon, true);
+    var url = '/api/' + panel + '?lat=' + lat + '&lon=' + lon;
+    if (region) url += '&region=' + encodeURIComponent(region);
+    xhr.open('GET', url, true);
     xhr.timeout = 45000;
     xhr.onload = function() {
         if (selectedFlagId !== requestedFlag) return;
@@ -1103,6 +1338,7 @@ function renderPanelData(panel, data, el) {
         case 'monitoring': renderMonitoringPanel(data, el); break;
         case 'instruments': renderInstrumentsPanel(data, el); break;
         case 'fieldreports': renderFieldReportsPanel(data, el); break;
+        case 'news': renderNewsPanel(data, el); break;
         default: el.innerHTML = '<div class="panel-empty">Unknown panel</div>';
     }
 }
@@ -1153,6 +1389,15 @@ function renderElevationPanel(data, el) {
     el.innerHTML = html;
 }
 
+function safeLink(url, text) {
+    try {
+        var u = new URL(url);
+        if (u.protocol !== 'https:' && u.protocol !== 'http:') return escapeHtml(text);
+        var safe = u.href.replace(/"/g, '&quot;');
+        return '<a href="' + safe + '" target="_blank" rel="noopener noreferrer" style="color:#0984e3;text-decoration:none;">' + escapeHtml(text) + '</a>';
+    } catch(e) { return escapeHtml(text); }
+}
+
 function renderSentinelPanel(data, el) {
     if (!data.scenes || data.scenes.length === 0) {
         el.innerHTML = '<div class="panel-empty">No recent Sentinel-2 scenes found</div>';
@@ -1163,15 +1408,19 @@ function renderSentinelPanel(data, el) {
     html += panelMetric('Cloud Cover', data.scenes[0].cloud_pct != null ? data.scenes[0].cloud_pct : 'N/A', '%');
     html += panelMetric('Scenes (30d)', data.total_scenes, '');
     html += '</div>';
-    if (data.scenes.length > 1) {
-        html += '<div style="font-size:12px;color:#636e72;margin-top:10px;">Recent scenes: ';
-        for (var i = 0; i < Math.min(data.scenes.length, 5); i++) {
-            if (i > 0) html += ', ';
-            html += escapeHtml(data.scenes[i].date);
-            if (data.scenes[i].cloud_pct != null) html += ' (' + data.scenes[i].cloud_pct + '%)';
+    html += '<div style="font-size:12px;color:#636e72;margin-top:10px;">Recent scenes: ';
+    for (var i = 0; i < Math.min(data.scenes.length, 5); i++) {
+        if (i > 0) html += ', ';
+        var s = data.scenes[i];
+        var label = s.date;
+        if (s.cloud_pct != null) label += ' (' + s.cloud_pct + '%)';
+        if (s.thumbnail) {
+            html += safeLink(s.thumbnail, label);
+        } else {
+            html += escapeHtml(label);
         }
-        html += '</div>';
     }
+    html += '</div>';
     el.innerHTML = html;
 }
 
@@ -1201,7 +1450,9 @@ function renderExposurePanel(data, el) {
     html += '<table class="panel-table"><tr><th>Name</th><th>Type</th><th>Dist</th></tr>';
     for (var i = 0; i < data.features.length; i++) {
         var feat = data.features[i];
-        html += '<tr><td>' + escapeHtml(feat.name) + '</td>';
+        var displayName = escapeHtml(feat.name);
+        if (feat.name_en) displayName += ' <span style="color:#636e72;font-size:12px;">(' + escapeHtml(feat.name_en) + ')</span>';
+        html += '<tr><td>' + displayName + '</td>';
         html += '<td style="color:#636e72;">' + escapeHtml(feat.type) + '</td>';
         html += '<td>' + feat.distance_km.toFixed(1) + ' km</td></tr>';
     }
@@ -1350,6 +1601,25 @@ function renderFieldReportsPanel(data, el) {
         }
         html += '</div>';
     }
+    el.innerHTML = html;
+}
+
+function renderNewsPanel(data, el) {
+    if (!data.articles || data.articles.length === 0) {
+        el.innerHTML = '<div class="panel-empty">No related articles found<br><span style="font-size:12px;color:#636e72;">Sources: OpenAlex, Crossref (academic and media)</span></div>';
+        return;
+    }
+    var html = '<div style="font-size:11px;color:#636e72;margin-bottom:8px;">Related articles from academic and media sources (OpenAlex, Crossref)</div>';
+    html += '<table class="panel-table"><tr><th>Title</th><th>Source</th><th>Date</th></tr>';
+    for (var i = 0; i < data.articles.length; i++) {
+        var a = data.articles[i];
+        var titleHtml = escapeHtml(a.title);
+        if (a.url) titleHtml = safeLink(a.url, a.title);
+        html += '<tr><td style="max-width:400px;">' + titleHtml + '</td>';
+        html += '<td style="color:#636e72;font-size:12px;white-space:nowrap;">' + escapeHtml(a.source || a.provider) + '</td>';
+        html += '<td style="white-space:nowrap;">' + escapeHtml(a.date || '') + '</td></tr>';
+    }
+    html += '</table>';
     el.innerHTML = html;
 }
 
@@ -1714,6 +1984,14 @@ def make_handler(
                     ttl=60,
                 ))
 
+            elif path == "/api/news":
+                region = params.get("region", [""])[0]
+                self._handle_geo_api(params, lambda lat, lon: _cached_call(
+                    f"news:{region or 'default'}",
+                    _get_news, lat, lon, region,
+                    ttl=3600,
+                ))
+
             else:
                 self._respond(404, "text/plain", b"Not Found")
 
@@ -1850,6 +2128,8 @@ def serve(data_dir: str, port: int, config: dict) -> None:
 
     flags = load_flags(data_path)
     state = load_state(state_path)
+
+    _resolve_flag_place_names(flags, data_path)
 
     handler_cls = make_handler(flags, state, state_path, site_name)
 
