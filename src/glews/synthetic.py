@@ -370,3 +370,113 @@ def _inject_failure_signal(
             displacement[i] -= noise_scale * spatial * rng.normal(0, 1, (n_rows, n_cols))
 
     return displacement
+
+
+def generate_demo_instruments(flags: list, output_dir: str) -> None:
+    """Generate a demo instruments.json with synthetic sensor data near flags."""
+    import json
+    from pathlib import Path
+
+    rng = np.random.default_rng(42)
+    instruments = []
+    inst_id = 1
+
+    voight_flags = [f for f in flags if hasattr(f, "voight_fit") and f.voight_fit]
+    if not voight_flags:
+        voight_flags = flags[:3] if len(flags) >= 3 else flags
+
+    types = [
+        ("gnss", "mm", 0.5, 50),
+        ("crackmeter", "mm", 0.0, 10),
+        ("tiltmeter", "degrees", 0.0, 2),
+    ]
+
+    for flag in voight_flags[:3]:
+        lat, lon = flag.center_lat, flag.center_lon
+        for itype, unit, base_val, scale in types:
+            offset_lat = rng.uniform(-0.02, 0.02)
+            offset_lon = rng.uniform(-0.02, 0.02)
+            readings = []
+            val = base_val + rng.uniform(0, scale * 0.1)
+            for day in range(0, 90, 3):
+                dt = (datetime.now() - timedelta(days=90 - day)).strftime("%Y-%m-%d")
+                if itype == "gnss":
+                    val += rng.uniform(0.1, 0.8)
+                elif itype == "crackmeter":
+                    val += rng.uniform(0.0, 0.3)
+                else:
+                    val += rng.uniform(0.0, 0.05)
+                readings.append({
+                    "date": dt,
+                    "value": round(val, 3),
+                    "unit": unit,
+                })
+            status = rng.choice(["active", "active", "active", "maintenance"], p=[0.7, 0.1, 0.1, 0.1])
+            instruments.append({
+                "id": f"INST-{inst_id:03d}",
+                "type": itype,
+                "lat": round(lat + offset_lat, 4),
+                "lon": round(lon + offset_lon, 4),
+                "status": status,
+                "installed_date": (datetime.now() - timedelta(days=120)).strftime("%Y-%m-%d"),
+                "readings": readings,
+            })
+            inst_id += 1
+
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "instruments.json").write_text(
+        json.dumps({"instruments": instruments}, indent=2)
+    )
+    logger.info("Wrote %d instruments to %s", len(instruments), out / "instruments.json")
+
+
+def generate_demo_field_reports(flags: list, output_dir: str) -> None:
+    """Generate demo field_reports.json with synthetic reconnaissance data."""
+    import json
+    from pathlib import Path
+
+    rng = np.random.default_rng(99)
+    reports = []
+
+    voight_flags = [f for f in flags if hasattr(f, "voight_fit") and f.voight_fit]
+    if not voight_flags:
+        voight_flags = flags[:2] if len(flags) >= 2 else flags
+
+    authors = ["Dr. K. Tamang", "R. Sherpa", "L. Chen"]
+    seepage_vals = ["none", "minor seepage", "active spring", "saturated ground"]
+    vegetation_vals = ["none", "minor tilting", "fallen trees", "bare scarp"]
+    cracking_vals = ["none observed", "hairline cracks", "tension cracks 2-5cm", "major fractures >10cm"]
+
+    for i, flag in enumerate(voight_flags[:3]):
+        lat, lon = flag.center_lat, flag.center_lon
+        days_ago = rng.integers(3, 30)
+        risk = rng.choice(["low", "moderate", "high", "critical"],
+                          p=[0.1, 0.3, 0.4, 0.2])
+        reports.append({
+            "id": f"FR-{i + 1:03d}",
+            "date": (datetime.now() - timedelta(days=int(days_ago))).strftime("%Y-%m-%d"),
+            "author": authors[i % len(authors)],
+            "lat": round(lat + rng.uniform(-0.005, 0.005), 4),
+            "lon": round(lon + rng.uniform(-0.005, 0.005), 4),
+            "observations": {
+                "crack_width_cm": round(float(rng.uniform(0.5, 15)), 1),
+                "scarp_height_m": round(float(rng.uniform(1, 25)), 1),
+                "seepage": rng.choice(seepage_vals),
+                "vegetation_disturbance": rng.choice(vegetation_vals),
+                "ground_cracking": rng.choice(cracking_vals),
+            },
+            "risk_assessment": risk,
+            "notes": [
+                "Visible tension cracks trending NE-SW. Local residents report increased rockfall over past 2 weeks.",
+                "Fresh scarp face with unstable blocks. Access road showing subsidence. Recommended immediate monitoring.",
+                "Seasonal seepage higher than previous years. Ground deformation visible near ridge crest.",
+            ][i % 3],
+        })
+
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "field_reports.json").write_text(
+        json.dumps({"reports": reports}, indent=2)
+    )
+    logger.info("Wrote %d field reports to %s", len(reports), out / "field_reports.json")

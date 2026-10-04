@@ -473,6 +473,165 @@ def _get_history(lat: float, lon: float, data_dir: Path) -> dict:
     return {"prior_flags": prior[:20]}
 
 
+def _get_monitoring_cadence(lat: float, lon: float) -> dict:
+    """Query ASF SearchAPI for Sentinel-1 acquisition cadence."""
+    now = datetime.now(timezone.utc)
+    start = (now - timedelta(days=90)).strftime("%Y-%m-%dT00:00:00Z")
+    end = now.strftime("%Y-%m-%dT23:59:59Z")
+    bbox_delta = 0.1
+    bbox = f"{lon - bbox_delta},{lat - bbox_delta},{lon + bbox_delta},{lat + bbox_delta}"
+
+    scenes_asc: list[str] = []
+    scenes_desc: list[str] = []
+
+    try:
+        url = (
+            "https://api.daac.asf.alaska.edu/services/search/param?"
+            f"platform=SENTINEL-1&bbox={bbox}"
+            f"&start={start}&end={end}"
+            "&processingLevel=SLC&output=json"
+        )
+        data = _fetch_json(url, timeout=15)
+        if isinstance(data, list) and data and isinstance(data[0], list):
+            results = data[0]
+        elif isinstance(data, list):
+            results = data
+        else:
+            results = data.get("results", data.get("features", []))
+        for item in results:
+            props = item if "startTime" in item else item.get("properties", item)
+            dt = (props.get("startTime") or props.get("datetime", ""))[:10]
+            direction = props.get("flightDirection", props.get("orbit_direction", ""))
+            if not dt:
+                continue
+            if direction.upper() == "ASCENDING":
+                scenes_asc.append(dt)
+            elif direction.upper() == "DESCENDING":
+                scenes_desc.append(dt)
+            else:
+                scenes_desc.append(dt)
+    except Exception as exc:
+        logger.info("ASF search failed: %s", exc)
+        return {
+            "error_detail": str(exc),
+            "total_scenes": 0,
+            "ascending": [],
+            "descending": [],
+            "cadence_days": None,
+            "next_expected": None,
+        }
+
+    scenes_asc.sort()
+    scenes_desc.sort()
+    all_scenes = sorted(set(scenes_asc + scenes_desc))
+
+    cadence_days = None
+    if len(all_scenes) >= 2:
+        gaps = []
+        for i in range(1, len(all_scenes)):
+            d1 = datetime.strptime(all_scenes[i - 1], "%Y-%m-%d")
+            d2 = datetime.strptime(all_scenes[i], "%Y-%m-%d")
+            gaps.append((d2 - d1).days)
+        cadence_days = round(sum(gaps) / len(gaps), 1)
+
+    next_expected = None
+    if all_scenes and cadence_days:
+        last = datetime.strptime(all_scenes[-1], "%Y-%m-%d")
+        next_dt = last + timedelta(days=round(cadence_days))
+        next_expected = next_dt.strftime("%Y-%m-%d")
+
+    return {
+        "total_scenes": len(all_scenes),
+        "ascending": scenes_asc[-5:],
+        "descending": scenes_desc[-5:],
+        "cadence_days": cadence_days,
+        "last_acquisition": all_scenes[-1] if all_scenes else None,
+        "next_expected": next_expected,
+    }
+
+
+def _get_instruments(lat: float, lon: float, data_dir: Path) -> dict:
+    """Read deployed in-situ instruments from instruments.json."""
+    instruments_path = data_dir / "instruments.json"
+    if not instruments_path.exists():
+        return {"instruments": [], "message": "No instruments.json found"}
+
+    try:
+        raw = json.loads(instruments_path.read_text())
+        instruments = raw if isinstance(raw, list) else raw.get("instruments", [])
+    except (json.JSONDecodeError, OSError):
+        return {"instruments": [], "message": "Error reading instruments.json"}
+
+    nearby = []
+    for inst in instruments:
+        ilat = inst.get("lat")
+        ilon = inst.get("lon")
+        if ilat is None or ilon is None:
+            continue
+        dist = _haversine(lat, lon, ilat, ilon)
+        if dist <= 25:
+            readings = inst.get("readings", [])
+            last_reading = readings[-1] if readings else None
+            trend = None
+            if len(readings) >= 2:
+                prev_val = readings[-2].get("value", 0)
+                cur_val = readings[-1].get("value", 0)
+                if cur_val > prev_val * 1.01:
+                    trend = "increasing"
+                elif cur_val < prev_val * 0.99:
+                    trend = "decreasing"
+                else:
+                    trend = "stable"
+            nearby.append({
+                "id": inst.get("id", "unknown"),
+                "type": inst.get("type", "unknown"),
+                "lat": ilat,
+                "lon": ilon,
+                "distance_km": round(dist, 2),
+                "status": inst.get("status", "unknown"),
+                "installed_date": inst.get("installed_date"),
+                "last_reading": last_reading,
+                "trend": trend,
+            })
+
+    nearby.sort(key=lambda x: x["distance_km"])
+    return {"instruments": nearby[:20]}
+
+
+def _get_field_reports(lat: float, lon: float, data_dir: Path) -> dict:
+    """Read field reconnaissance reports from field_reports.json."""
+    reports_path = data_dir / "field_reports.json"
+    if not reports_path.exists():
+        return {"reports": [], "message": "No field_reports.json found"}
+
+    try:
+        raw = json.loads(reports_path.read_text())
+        reports = raw if isinstance(raw, list) else raw.get("reports", [])
+    except (json.JSONDecodeError, OSError):
+        return {"reports": [], "message": "Error reading field_reports.json"}
+
+    nearby = []
+    for rpt in reports:
+        rlat = rpt.get("lat")
+        rlon = rpt.get("lon")
+        if rlat is None or rlon is None:
+            continue
+        dist = _haversine(lat, lon, rlat, rlon)
+        if dist <= 10:
+            nearby.append({
+                "id": rpt.get("id", "unknown"),
+                "date": rpt.get("date"),
+                "author": rpt.get("author", "Unknown"),
+                "distance_km": round(dist, 2),
+                "observations": rpt.get("observations", {}),
+                "risk_assessment": rpt.get("risk_assessment", "unknown"),
+                "notes": rpt.get("notes", ""),
+            })
+
+    nearby.sort(key=lambda x: x.get("date", ""), reverse=True)
+    return {"reports": nearby[:10]}
+
+
 # ---------------------------------------------------------------------------
 # HTML template
 # ---------------------------------------------------------------------------
@@ -579,6 +738,30 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .draft-output .draft-header { font-weight: 700; font-size: 14px; margin-bottom: 8px; color: #2d3436; }
 .copy-btn { position: absolute; top: 8px; right: 8px; padding: 4px 12px; border: 1px solid #dfe6e9; border-radius: 4px; background: #fff; font-size: 12px; cursor: pointer; }
 .copy-btn:hover { background: #dfe6e9; }
+
+/* Instrument status */
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+.status-active { background: #00b894; }
+.status-offline { background: #d63031; }
+.status-maintenance { background: #fdcb6e; }
+.status-unknown { background: #636e72; }
+.trend-arrow { font-size: 14px; margin-left: 4px; }
+.trend-increasing { color: #d63031; }
+.trend-decreasing { color: #00b894; }
+.trend-stable { color: #636e72; }
+.risk-badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
+.risk-critical { background: #d63031; color: #fff; }
+.risk-high { background: #e17055; color: #fff; }
+.risk-moderate { background: #fdcb6e; color: #2d3436; }
+.risk-low { background: #00b894; color: #fff; }
+.risk-unknown { background: #636e72; color: #fff; }
+.enhance-toggle { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 12px; background: #f5f6fa; border-radius: 4px; }
+.enhance-toggle button { padding: 4px 12px; border: 1px solid #0984e3; border-radius: 4px; background: #fff; color: #0984e3; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.enhance-toggle button.active { background: #0984e3; color: #fff; }
+.enhance-toggle button:hover { filter: brightness(0.95); }
+.obs-list { list-style: none; padding: 0; margin: 0; font-size: 13px; }
+.obs-list li { padding: 4px 0; border-bottom: 1px solid #f5f6fa; }
+.obs-label { color: #636e72; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; }
 
 /* Analyst actions */
 .actions-card { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 24px; }
@@ -778,6 +961,17 @@ function renderDetail(flagId) {
     html += '<div class="info-panel"><h3><span class="panel-icon">&#128197;</span> Flag History</h3><div class="panel-content" id="panel-history"></div></div>';
     html += '</div>';
 
+    // --- Info panels row 4: Monitoring Cadence + In-Situ Instruments ---
+    html += '<div class="info-panels">';
+    html += '<div class="info-panel"><h3><span class="panel-icon">&#128225;</span> Monitoring Cadence</h3><div class="panel-content" id="panel-monitoring"></div></div>';
+    html += '<div class="info-panel"><h3><span class="panel-icon">&#128296;</span> In-Situ Instruments</h3><div class="panel-content" id="panel-instruments"></div></div>';
+    html += '</div>';
+
+    // --- Info panels row 5: Field Reconnaissance ---
+    html += '<div class="info-panels">';
+    html += '<div class="info-panel" style="grid-column: 1 / -1;"><h3><span class="panel-icon">&#128269;</span> Field Reconnaissance</h3><div class="panel-content" id="panel-fieldreports"></div></div>';
+    html += '</div>';
+
     // Response protocol (shown when Voight escalation triggers)
     html += '<div class="response-protocol" id="responseProtocol" style="display:none;">';
     html += '<h3>Response Protocol</h3>';
@@ -822,6 +1016,9 @@ function renderDetail(flagId) {
         loadPanel('weather', f.center_lat, f.center_lon);
         loadPanel('exposure', f.center_lat, f.center_lon);
         loadPanel('history', f.center_lat, f.center_lon);
+        loadPanel('monitoring', f.center_lat, f.center_lon);
+        loadPanel('instruments', f.center_lat, f.center_lon);
+        loadPanel('fieldreports', f.center_lat, f.center_lon);
     }
 }
 
@@ -903,6 +1100,9 @@ function renderPanelData(panel, data, el) {
         case 'weather': renderWeatherPanel(data, el); break;
         case 'exposure': renderExposurePanel(data, el); break;
         case 'history': renderHistoryPanel(data, el); break;
+        case 'monitoring': renderMonitoringPanel(data, el); break;
+        case 'instruments': renderInstrumentsPanel(data, el); break;
+        case 'fieldreports': renderFieldReportsPanel(data, el); break;
         default: el.innerHTML = '<div class="panel-empty">Unknown panel</div>';
     }
 }
@@ -1023,6 +1223,133 @@ function renderHistoryPanel(data, el) {
         html += '<td>' + pf.distance_m.toFixed(0) + ' m</td></tr>';
     }
     html += '</table>';
+    el.innerHTML = html;
+}
+
+function renderMonitoringPanel(data, el) {
+    if (data.error_detail) {
+        el.innerHTML = '<div class="panel-error">ASF API unavailable: ' + escapeHtml(data.error_detail.substring(0, 80)) + '</div>';
+        return;
+    }
+    if (data.total_scenes === 0) {
+        el.innerHTML = '<div class="panel-empty">No Sentinel-1 acquisitions found in the last 90 days</div>';
+        return;
+    }
+    var html = '<div class="panel-grid">';
+    html += panelMetric('Scenes (90d)', data.total_scenes, '');
+    html += panelMetric('Cadence', data.cadence_days != null ? data.cadence_days : 'N/A', ' days');
+    html += panelMetric('Last Acq.', data.last_acquisition || 'N/A', '');
+    html += panelMetric('Next Expected', data.next_expected || 'N/A', '');
+    html += panelMetric('Ascending', data.ascending ? data.ascending.length : 0, '');
+    html += panelMetric('Descending', data.descending ? data.descending.length : 0, '');
+    html += '</div>';
+    var f = getSelectedFlag();
+    var fid = f ? String(f.flag_id) : '';
+    var st = STATE[fid] || {};
+    var enhanced = st.enhanced_monitoring || false;
+    html += '<div class="enhance-toggle">';
+    html += '<span style="font-size:12px;color:#636e72;">Enhanced Monitoring:</span>';
+    html += '<button class="' + (enhanced ? 'active' : '') + '" onclick="toggleEnhancedMonitoring()">' + (enhanced ? 'Requested' : 'Request') + '</button>';
+    if (st.enhanced_monitoring_at) {
+        html += '<span style="font-size:11px;color:#636e72;">since ' + escapeHtml(st.enhanced_monitoring_at) + '</span>';
+    }
+    html += '</div>';
+    el.innerHTML = html;
+}
+
+function toggleEnhancedMonitoring() {
+    var f = getSelectedFlag();
+    if (!f) return;
+    var fid = String(f.flag_id);
+    var st = STATE[fid] || {};
+    var newVal = !st.enhanced_monitoring;
+    var payload = JSON.stringify({flag_id: f.flag_id, enhanced: newVal});
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/monitoring/enhance', true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.onload = function() {
+        if (xhr.status === 200) {
+            if (!STATE[fid]) STATE[fid] = {};
+            STATE[fid].enhanced_monitoring = newVal;
+            STATE[fid].enhanced_monitoring_at = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+            loadPanel('monitoring', f.center_lat, f.center_lon);
+        }
+    };
+    xhr.send(payload);
+}
+
+function renderInstrumentsPanel(data, el) {
+    if (data.message && (!data.instruments || data.instruments.length === 0)) {
+        el.innerHTML = '<div class="panel-empty">' + escapeHtml(data.message) + '<br><span style="font-size:12px;color:#636e72;">Place an instruments.json file in the data directory to display deployed sensors.</span></div>';
+        return;
+    }
+    if (!data.instruments || data.instruments.length === 0) {
+        el.innerHTML = '<div class="panel-empty">No instruments deployed within 25 km</div>';
+        return;
+    }
+    var html = '<table class="panel-table"><tr><th>Type</th><th>Status</th><th>Last Reading</th><th>Trend</th><th>Dist</th></tr>';
+    for (var i = 0; i < data.instruments.length; i++) {
+        var inst = data.instruments[i];
+        var statusClass = 'status-' + (inst.status || 'unknown');
+        var trendArrow = '';
+        if (inst.trend === 'increasing') trendArrow = '<span class="trend-arrow trend-increasing">&#9650;</span>';
+        else if (inst.trend === 'decreasing') trendArrow = '<span class="trend-arrow trend-decreasing">&#9660;</span>';
+        else if (inst.trend === 'stable') trendArrow = '<span class="trend-arrow trend-stable">&#9644;</span>';
+        var readingStr = 'N/A';
+        if (inst.last_reading) {
+            readingStr = inst.last_reading.value;
+            if (inst.last_reading.unit) readingStr += ' ' + inst.last_reading.unit;
+        }
+        html += '<tr>';
+        html += '<td>' + escapeHtml(inst.type) + '</td>';
+        html += '<td><span class="status-dot ' + statusClass + '"></span>' + escapeHtml(inst.status || 'unknown') + '</td>';
+        html += '<td>' + escapeHtml(String(readingStr)) + '</td>';
+        html += '<td>' + trendArrow + '</td>';
+        html += '<td>' + inst.distance_km.toFixed(1) + ' km</td>';
+        html += '</tr>';
+    }
+    html += '</table>';
+    el.innerHTML = html;
+}
+
+function renderFieldReportsPanel(data, el) {
+    if (data.message && (!data.reports || data.reports.length === 0)) {
+        el.innerHTML = '<div class="panel-empty">' + escapeHtml(data.message) + '<br><span style="font-size:12px;color:#636e72;">Place a field_reports.json file in the data directory to display reconnaissance data.</span></div>';
+        return;
+    }
+    if (!data.reports || data.reports.length === 0) {
+        el.innerHTML = '<div class="panel-empty">No field reports within 10 km</div>';
+        return;
+    }
+    var html = '';
+    for (var i = 0; i < data.reports.length; i++) {
+        var rpt = data.reports[i];
+        var riskClass = 'risk-' + (rpt.risk_assessment || 'unknown');
+        html += '<div style="padding:10px;background:#f5f6fa;border-radius:6px;margin-bottom:8px;">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+        html += '<span style="font-weight:600;font-size:13px;">' + escapeHtml(rpt.date || 'Unknown date') + ' — ' + escapeHtml(rpt.author) + '</span>';
+        html += '<span class="risk-badge ' + riskClass + '">' + escapeHtml((rpt.risk_assessment || 'unknown').toUpperCase()) + '</span>';
+        html += '</div>';
+        var obs = rpt.observations || {};
+        var obsItems = [];
+        if (obs.crack_width_cm != null) obsItems.push('Crack width: ' + obs.crack_width_cm + ' cm');
+        if (obs.scarp_height_m != null) obsItems.push('Scarp height: ' + obs.scarp_height_m + ' m');
+        if (obs.seepage) obsItems.push('Seepage: ' + obs.seepage);
+        if (obs.vegetation_disturbance) obsItems.push('Vegetation: ' + obs.vegetation_disturbance);
+        if (obs.rock_fall_activity) obsItems.push('Rock fall: ' + obs.rock_fall_activity);
+        if (obs.ground_cracking) obsItems.push('Ground cracking: ' + obs.ground_cracking);
+        if (obsItems.length > 0) {
+            html += '<ul class="obs-list">';
+            for (var j = 0; j < obsItems.length; j++) {
+                html += '<li>' + escapeHtml(obsItems[j]) + '</li>';
+            }
+            html += '</ul>';
+        }
+        if (rpt.notes) {
+            html += '<div style="font-size:12px;color:#636e72;margin-top:6px;font-style:italic;">' + escapeHtml(rpt.notes) + '</div>';
+        }
+        html += '</div>';
+    }
     el.innerHTML = html;
 }
 
@@ -1369,6 +1696,24 @@ def make_handler(
                     ttl=60,
                 ))
 
+            elif path == "/api/monitoring":
+                self._handle_geo_api(params, lambda lat, lon: _cached_call(
+                    f"mon:{lat:.2f},{lon:.2f}", _get_monitoring_cadence, lat, lon,
+                    ttl=600,
+                ))
+
+            elif path == "/api/instruments":
+                self._handle_geo_api(params, lambda lat, lon: _cached_call(
+                    f"inst:{lat:.4f},{lon:.4f}", _get_instruments, lat, lon, data_dir,
+                    ttl=60,
+                ))
+
+            elif path == "/api/fieldreports":
+                self._handle_geo_api(params, lambda lat, lon: _cached_call(
+                    f"fr:{lat:.4f},{lon:.4f}", _get_field_reports, lat, lon, data_dir,
+                    ttl=60,
+                ))
+
             else:
                 self._respond(404, "text/plain", b"Not Found")
 
@@ -1442,6 +1787,28 @@ def make_handler(
                 self._respond(
                     200, "application/json", json.dumps(entry).encode()
                 )
+
+            elif path == "/api/monitoring/enhance":
+                length = int(self.headers.get("Content-Length", 0))
+                raw = self.rfile.read(length)
+                try:
+                    data = json.loads(raw)
+                except json.JSONDecodeError:
+                    self._respond(400, "application/json",
+                                  json.dumps({"error": "Invalid JSON"}).encode())
+                    return
+                fid = str(data.get("flag_id"))
+                enhanced = bool(data.get("enhanced", False))
+                with state_lock:
+                    if fid not in state:
+                        state[fid] = {}
+                    state[fid]["enhanced_monitoring"] = enhanced
+                    state[fid]["enhanced_monitoring_at"] = datetime.now(
+                        timezone.utc
+                    ).strftime("%Y-%m-%d %H:%M UTC")
+                    save_state(state_path, state)
+                self._respond(200, "application/json",
+                              json.dumps({"enhanced": enhanced}).encode())
             else:
                 self._respond(404, "text/plain", b"Not Found")
 

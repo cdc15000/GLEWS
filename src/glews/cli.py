@@ -250,7 +250,11 @@ def demo(output: str, no_plots: bool) -> None:
     """
     from glews.detect import detect_anomalies
     from glews.report import generate_report
-    from glews.synthetic import generate_synthetic_scene
+    from glews.synthetic import (
+        generate_demo_field_reports,
+        generate_demo_instruments,
+        generate_synthetic_scene,
+    )
     from glews.timeseries import compute_acceleration_map
 
     click.echo("=" * 60)
@@ -345,6 +349,14 @@ def demo(output: str, no_plots: bool) -> None:
         click.echo("  No flags detected (adjust sigma_threshold if needed)")
     else:
         click.echo("Step 3/3  Skipping plots (--no-plots)")
+
+    # Generate demo in-situ and field report data
+    if flags:
+        click.echo("\nGenerating demo in-situ instruments and field reports...")
+        generate_demo_instruments(flags, output)
+        generate_demo_field_reports(flags, output)
+        click.echo(f"  instruments.json: {Path(output) / 'instruments.json'}")
+        click.echo(f"  field_reports.json: {Path(output) / 'field_reports.json'}")
 
     # Summary
     click.echo()
