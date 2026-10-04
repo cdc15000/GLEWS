@@ -668,19 +668,152 @@ def _get_field_reports(lat: float, lon: float, data_dir: Path) -> dict:
     return {"reports": nearby[:10]}
 
 
-def _get_news(lat: float, lon: float, region: str = "") -> dict:
-    """Fetch related news from OpenAlex and Crossref."""
-    query_terms = "landslide glacier hazard"
-    if region:
-        query_terms += " " + region
+_country_cache: dict[str, str] = {}
 
-    articles: list[dict] = []
+
+def _reverse_country(lat: float, lon: float) -> str:
+    """Reverse-geocode lat/lon to country name via Nominatim, cached."""
+    key = f"{lat:.1f},{lon:.1f}"
+    if key in _country_cache:
+        return _country_cache[key]
+    try:
+        url = (
+            f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}"
+            "&format=json&zoom=3&accept-language=en"
+        )
+        req = urllib.request.Request(url, headers={"User-Agent": "GLEWS/0.1"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read())
+        country = data.get("address", {}).get("country", "")
+        _country_cache[key] = country
+        return country
+    except Exception:
+        _country_cache[key] = ""
+        return ""
+
+
+def _get_news(lat: float, lon: float, region: str = "") -> dict:
+    """Fetch related news from Google News RSS (media) plus OpenAlex and Crossref (academic)."""
+    import xml.etree.ElementTree as ET
+
+    country = _reverse_country(lat, lon)
+
+    media_articles: list[dict] = []
+    academic_articles: list[dict] = []
+
+    news_geo = country or region or "Himalaya"
+
+    def _parse_rss_date(pub: str) -> str:
+        """Convert RSS pubDate like 'Sat, 03 Oct 2026 07:00:00 GMT' to YYYY-MM-DD."""
+        if not pub:
+            return ""
+        try:
+            from email.utils import parsedate_to_datetime
+            dt = parsedate_to_datetime(pub)
+            return dt.strftime("%Y-%m-%d")
+        except Exception:
+            return pub[:16]
+
+    _SOURCE_NAMES: dict[str, str] = {
+        "markets.businessinsider.com": "Business Insider",
+        "scmp.com": "South China Morning Post",
+        "eos.org": "Eos",
+        "phys.org": "Phys.org",
+        "apnews.com": "AP News",
+        "bbc.com": "BBC News",
+        "bbc.co.uk": "BBC News",
+        "theguardian.com": "The Guardian",
+        "reuters.com": "Reuters",
+        "france24.com": "France 24",
+        "dw.com": "Deutsche Welle",
+        "aljazeera.com": "Al Jazeera",
+        "cnn.com": "CNN",
+        "washingtonpost.com": "Washington Post",
+        "nytimes.com": "New York Times",
+    }
+
+    def _normalize_source(source: str) -> str:
+        """Remove marketing slogans and map URLs to organization names."""
+        if not source:
+            return source
+        for domain, name in _SOURCE_NAMES.items():
+            if domain in source.lower():
+                return name
+        sep = source.find(" - ")
+        if sep > 0:
+            return source[:sep].strip()
+        sep = source.find(" | ")
+        if sep > 0:
+            return source[:sep].strip()
+        sep = source.find(" – ")
+        if sep > 0:
+            candidate = source[:sep].strip()
+            if len(candidate) >= 3:
+                return candidate
+        return source
+
+    def _strip_source_suffix(title: str, source: str) -> str:
+        """Remove trailing ' - Source Name' appended by Google News."""
+        if source and title.endswith(" - " + source):
+            return title[: -(len(source) + 3)]
+        return title
+
+    def _fetch_rss(query: str, hl: str = "en", gl: str = "US",
+                   ceid: str = "US:en", limit: int = 8) -> list[dict]:
+        items: list[dict] = []
+        try:
+            q = urllib.parse.quote(query)
+            url = (
+                f"https://news.google.com/rss/search?q={q}"
+                f"&hl={hl}&gl={gl}&ceid={ceid}"
+            )
+            req = urllib.request.Request(url, headers={"User-Agent": "GLEWS/0.1"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                xml_data = resp.read()
+            root = ET.fromstring(xml_data)
+            for item in root.findall(".//item")[:limit]:
+                title_el = item.find("title")
+                title = title_el.text.strip() if title_el is not None and title_el.text else ""
+                if not title:
+                    continue
+                source_el = item.find("source")
+                source = source_el.text.strip() if source_el is not None and source_el.text else ""
+                title = _strip_source_suffix(title, source)
+                source = _normalize_source(source)
+                link_el = item.find("link")
+                link = link_el.text.strip() if link_el is not None and link_el.text else ""
+                pub_el = item.find("pubDate")
+                pub = pub_el.text.strip() if pub_el is not None and pub_el.text else ""
+                items.append({
+                    "title": title,
+                    "url": link,
+                    "date": _parse_rss_date(pub),
+                    "source": source,
+                    "type": "media",
+                })
+        except Exception as exc:
+            logger.info("Google News RSS query failed (%s): %s", gl, exc)
+        return items
+
+    rss_query = f"landslide OR glacier OR rockfall {news_geo}"
+    media_articles = _fetch_rss(rss_query, hl="en", gl="US", ceid="US:en", limit=5)
+    media_articles += _fetch_rss(rss_query, hl="en", gl="GB", ceid="GB:en", limit=5)
+
+    local_query = f"landslide OR flood OR disaster {region}" if region else ""
+    if local_query:
+        media_articles += _fetch_rss(local_query, hl="en", gl="US", ceid="US:en", limit=3)
+
+    academic_articles: list[dict] = []
+    academic_geo = " ".join(filter(None, [region, country]))
+    if not academic_geo:
+        academic_geo = "Himalaya"
+    academic_query = f"landslide glacier hazard {academic_geo}"
 
     try:
-        q = urllib.parse.quote(query_terms)
+        q = urllib.parse.quote(academic_query)
         url = (
             f"https://api.openalex.org/works?search={q}"
-            "&per_page=5&sort=publication_date:desc"
+            "&per_page=3&sort=publication_date:desc"
             "&select=title,doi,publication_date,primary_location"
         )
         data = _fetch_json(url, timeout=12)
@@ -690,21 +823,21 @@ def _get_news(lat: float, lon: float, region: str = "") -> dict:
                 continue
             loc = r.get("primary_location") or {}
             src = loc.get("source") or {}
-            articles.append({
+            academic_articles.append({
                 "title": title,
                 "url": r.get("doi", ""),
                 "date": (r.get("publication_date") or "")[:10],
                 "source": src.get("display_name", ""),
-                "provider": "OpenAlex",
+                "type": "academic",
             })
     except Exception as exc:
         logger.info("OpenAlex query failed: %s", exc)
 
     try:
-        q = urllib.parse.quote(query_terms)
+        q = urllib.parse.quote(academic_query)
         url = (
             f"https://api.crossref.org/works?query={q}"
-            "&rows=5&sort=relevance&order=desc"
+            "&rows=3&sort=relevance&order=desc"
             "&select=title,URL,published-print,container-title"
         )
         data = _fetch_json(url, timeout=12)
@@ -717,26 +850,52 @@ def _get_news(lat: float, lon: float, region: str = "") -> dict:
             journal = journal_list[0] if journal_list else ""
             pub = it.get("published-print") or it.get("published-online") or {}
             parts = pub.get("date-parts", [[]])[0]
-            year = str(parts[0]) if parts else ""
-            articles.append({
+            date_str = "-".join(str(p).zfill(2) for p in parts) if parts else ""
+            academic_articles.append({
                 "title": title,
                 "url": it.get("URL", ""),
-                "date": year,
+                "date": date_str,
                 "source": journal,
-                "provider": "Crossref",
+                "type": "academic",
             })
     except Exception as exc:
         logger.info("Crossref query failed: %s", exc)
 
     seen_titles: set[str] = set()
-    unique: list[dict] = []
-    for a in articles:
+    unique_media: list[dict] = []
+    for a in media_articles:
         key = a["title"].lower()[:60]
         if key not in seen_titles:
             seen_titles.add(key)
-            unique.append(a)
+            unique_media.append(a)
+    unique_academic: list[dict] = []
+    for a in academic_articles:
+        key = a["title"].lower()[:60]
+        if key not in seen_titles:
+            seen_titles.add(key)
+            unique_academic.append(a)
 
-    return {"articles": unique[:8]}
+    interleaved: list[dict] = []
+    ai, mi = 0, 0
+    while len(interleaved) < 15 and (mi < len(unique_media) or ai < len(unique_academic)):
+        if mi < len(unique_media):
+            interleaved.append(unique_media[mi]); mi += 1
+        if len(interleaved) >= 15:
+            break
+        if mi < len(unique_media):
+            interleaved.append(unique_media[mi]); mi += 1
+        if len(interleaved) >= 15:
+            break
+        if ai < len(unique_academic):
+            interleaved.append(unique_academic[ai]); ai += 1
+        if len(interleaved) >= 15:
+            break
+    while len(interleaved) < 15 and mi < len(unique_media):
+        interleaved.append(unique_media[mi]); mi += 1
+    while len(interleaved) < 15 and ai < len(unique_academic):
+        interleaved.append(unique_academic[ai]); ai += 1
+
+    return {"articles": interleaved[:15]}
 
 
 def _resolve_flag_place_names(flags: list[dict], data_dir: Path) -> None:
@@ -853,34 +1012,97 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
+:root {
+    --bg-page: #f5f6fa;
+    --bg-card: #fff;
+    --bg-inset: #f5f6fa;
+    --text-primary: #2d3436;
+    --text-secondary: #636e72;
+    --text-muted: #b2bec3;
+    --border: #dfe6e9;
+    --border-dark: #485460;
+    --sidebar-bg: #1e272e;
+    --sidebar-border: #485460;
+    --sidebar-hover: #2d3e50;
+    --sidebar-text: #dfe6e9;
+    --shadow: rgba(0,0,0,0.06);
+    --accent: #0984e3;
+    --chart-line: #0984e3;
+    --chart-grid: #dfe6e9;
+    --chart-axis: #636e72;
+    --chart-label: #2d3436;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg-page: #1a1a2e;
+    --bg-card: #16213e;
+    --bg-inset: #1a1a2e;
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0b0;
+    --text-muted: #6c6c80;
+    --border: #2a2a4a;
+    --border-dark: #2a2a4a;
+    --sidebar-bg: #0f0f23;
+    --sidebar-border: #2a2a4a;
+    --sidebar-hover: #1a1a3e;
+    --sidebar-text: #d0d0e0;
+    --shadow: rgba(0,0,0,0.3);
+    --accent: #4dabf7;
+    --chart-line: #4dabf7;
+    --chart-grid: #2a2a4a;
+    --chart-axis: #a0a0b0;
+    --chart-label: #e0e0e0;
+  }
+}
+:root[data-theme="dark"] {
+    --bg-page: #1a1a2e;
+    --bg-card: #16213e;
+    --bg-inset: #1a1a2e;
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0b0;
+    --text-muted: #6c6c80;
+    --border: #2a2a4a;
+    --border-dark: #2a2a4a;
+    --sidebar-bg: #0f0f23;
+    --sidebar-border: #2a2a4a;
+    --sidebar-hover: #1a1a3e;
+    --sidebar-text: #d0d0e0;
+    --shadow: rgba(0,0,0,0.3);
+    --accent: #4dabf7;
+    --chart-line: #4dabf7;
+    --chart-grid: #2a2a4a;
+    --chart-axis: #a0a0b0;
+    --chart-label: #e0e0e0;
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; height: 100vh; background: #f5f6fa; color: #2d3436; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; height: 100vh; background: var(--bg-page); color: var(--text-primary); }
 
 /* Sidebar */
-.sidebar { width: 340px; min-width: 340px; background: #1e272e; color: #dfe6e9; display: flex; flex-direction: column; overflow: hidden; }
-.sidebar-header { padding: 20px; border-bottom: 1px solid #485460; }
+.sidebar { width: 340px; min-width: 340px; background: var(--sidebar-bg); color: var(--sidebar-text); display: flex; flex-direction: column; overflow: hidden; }
+.sidebar-header { padding: 20px; border-bottom: 1px solid var(--sidebar-border); }
 .sidebar-header h1 { font-size: 18px; color: #fff; margin-bottom: 4px; }
-.sidebar-header .site-name { font-size: 13px; color: #b2bec3; }
-.sidebar-stats { padding: 12px 20px; border-bottom: 1px solid #485460; display: flex; gap: 12px; }
+.sidebar-header .site-name { font-size: 13px; color: var(--text-muted); }
+.sidebar-stats { padding: 12px 20px; border-bottom: 1px solid var(--sidebar-border); display: flex; gap: 12px; }
 .sidebar-stats .stat { text-align: center; flex: 1; }
 .sidebar-stats .stat-value { font-size: 20px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
-.sidebar-stats .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #636e72; }
+.sidebar-stats .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); }
 .sidebar-stats .stat-value.critical { color: #d63031; }
 .sidebar-stats .stat-value.warning { color: #fdcb6e; }
 .sidebar-stats .stat-value.info { color: #74b9ff; }
-.sidebar-filter { padding: 12px 20px; border-bottom: 1px solid #485460; display: flex; gap: 6px; }
-.sidebar-filter button { padding: 4px 10px; border: 1px solid #636e72; border-radius: 4px; background: transparent; color: #b2bec3; cursor: pointer; font-size: 12px; }
-.sidebar-filter button.active { background: #0984e3; border-color: #0984e3; color: #fff; }
+.sidebar-filter { padding: 12px 20px; border-bottom: 1px solid var(--sidebar-border); display: flex; gap: 6px; }
+.sidebar-filter button { padding: 4px 10px; border: 1px solid var(--text-secondary); border-radius: 4px; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px; }
+.sidebar-filter button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .flag-list { flex: 1; overflow-y: auto; }
-.flag-item { padding: 14px 20px; border-bottom: 1px solid #2d3e50; cursor: pointer; transition: background 0.15s; }
-.flag-item:hover { background: #2d3e50; }
-.flag-item.selected { background: #0984e3; }
+.flag-item { padding: 14px 20px; border-bottom: 1px solid var(--sidebar-hover); cursor: pointer; transition: background 0.15s; }
+.flag-item:hover { background: var(--sidebar-hover); }
+.flag-item.selected { background: var(--accent); }
 .flag-item .flag-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .flag-item .flag-id { font-weight: 600; font-size: 14px; }
-.flag-item .flag-score { font-size: 13px; color: #b2bec3; }
-.flag-item.selected .flag-score { color: #dfe6e9; }
-.flag-item .flag-meta { font-size: 12px; color: #636e72; }
-.flag-item.selected .flag-meta { color: #b2bec3; }
+.flag-item .flag-score { font-size: 13px; color: var(--text-muted); }
+.flag-item.selected .flag-score { color: var(--sidebar-text); }
+.flag-item .flag-meta { font-size: 12px; color: var(--text-secondary); }
+.flag-item.selected .flag-meta { color: var(--text-muted); }
 .severity-badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
 .severity-CRITICAL { background: #d63031; color: #fff; }
 .severity-WARNING { background: #fdcb6e; color: #2d3436; }
@@ -890,104 +1112,125 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .classification-Warning { background: #fdcb6e; color: #2d3436; }
 .classification-Cleared { background: #00b894; color: #fff; }
 
+/* Theme toggle */
+.theme-toggle { position: fixed; bottom: 16px; right: 16px; z-index: 1000; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary); cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px var(--shadow); transition: all 0.2s; }
+.theme-toggle:hover { border-color: var(--accent); }
+
 /* Main content */
 .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.main-header { padding: 20px 30px; background: #fff; border-bottom: 1px solid #dfe6e9; }
-.main-header h2 { font-size: 20px; color: #2d3436; }
+.main-header { padding: 20px 30px; background: var(--bg-card); border-bottom: 1px solid var(--border); }
+.main-header h2 { font-size: 20px; color: var(--text-primary); }
 .main-body { flex: 1; overflow-y: auto; padding: 30px; }
 
 /* Detail card */
-.detail-card { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 24px; margin-bottom: 20px; }
-.detail-card h3 { font-size: 16px; margin-bottom: 16px; color: #2d3436; border-bottom: 1px solid #dfe6e9; padding-bottom: 10px; }
+.detail-card { background: var(--bg-card); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow); padding: 24px; margin-bottom: 20px; }
+.detail-card h3 { font-size: 16px; margin-bottom: 16px; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 10px; }
 .metrics-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
-.metric { background: #f5f6fa; border-radius: 6px; padding: 14px; }
-.metric .label { font-size: 11px; text-transform: uppercase; color: #636e72; letter-spacing: 0.5px; margin-bottom: 4px; }
-.metric .value { font-size: 20px; font-weight: 700; color: #2d3436; }
-.metric .unit { font-size: 12px; color: #636e72; margin-left: 2px; }
+.metric { background: var(--bg-inset); border-radius: 6px; padding: 14px; }
+.metric .label { font-size: 11px; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.5px; margin-bottom: 4px; }
+.metric .value { font-size: 20px; font-weight: 700; color: var(--text-primary); }
+.metric .unit { font-size: 12px; color: var(--text-secondary); margin-left: 2px; }
 
 /* Map */
-.map-container { margin-bottom: 20px; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); overflow: hidden; }
-.map-container h3 { font-size: 16px; padding: 16px 24px 10px; color: #2d3436; border-bottom: 1px solid #dfe6e9; margin: 0; }
+.map-container { margin-bottom: 20px; background: var(--bg-card); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow); overflow: hidden; }
+.map-container h3 { font-size: 16px; padding: 16px 24px 10px; color: var(--text-primary); border-bottom: 1px solid var(--border); margin: 0; }
 #flagMap { height: 300px; }
 
 /* Chart area */
-.chart-container { margin-top: 16px; padding: 16px; background: #f5f6fa; border-radius: 6px; text-align: center; }
-.chart-container .no-data { color: #636e72; font-size: 14px; padding: 40px; }
+.chart-container { margin-top: 16px; padding: 16px; background: var(--bg-inset); border-radius: 6px; text-align: center; }
+.chart-container .no-data { color: var(--text-secondary); font-size: 14px; padding: 40px; }
 
 /* Info panels */
 .info-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-.info-panel { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); overflow: hidden; }
-.info-panel h3 { font-size: 14px; padding: 12px 16px; border-bottom: 1px solid #dfe6e9; color: #2d3436; margin: 0; display: flex; align-items: center; gap: 8px; }
+.info-panel { background: var(--bg-card); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow); overflow: hidden; }
+.info-panel h3 { font-size: 14px; padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 8px; }
 .info-panel h3 .panel-icon { font-size: 16px; opacity: 0.7; }
 .panel-content { padding: 16px; min-height: 80px; }
 .panel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
-.panel-metric { text-align: center; padding: 8px; background: #f5f6fa; border-radius: 4px; }
-.panel-metric .pm-label { font-size: 10px; text-transform: uppercase; color: #636e72; letter-spacing: 0.5px; margin-bottom: 2px; }
-.panel-metric .pm-value { font-size: 16px; font-weight: 700; color: #2d3436; }
-.panel-metric .pm-unit { font-size: 11px; color: #636e72; }
-.panel-loading { color: #636e72; font-size: 13px; padding: 20px 0; text-align: center; }
+.panel-metric { text-align: center; padding: 8px; background: var(--bg-inset); border-radius: 4px; }
+.panel-metric .pm-label { font-size: 10px; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.5px; margin-bottom: 2px; }
+.panel-metric .pm-value { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.panel-metric .pm-unit { font-size: 11px; color: var(--text-secondary); }
+.panel-loading { color: var(--text-secondary); font-size: 13px; padding: 20px 0; text-align: center; }
 .panel-error { color: #d63031; font-size: 13px; padding: 8px 0; }
-.panel-empty { color: #636e72; font-size: 13px; padding: 8px 0; }
+.panel-empty { color: var(--text-secondary); font-size: 13px; padding: 8px 0; }
 .panel-table { width: 100%; font-size: 13px; border-collapse: collapse; }
-.panel-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid #dfe6e9; font-size: 11px; text-transform: uppercase; color: #636e72; letter-spacing: 0.3px; }
-.panel-table td { padding: 6px 8px; border-bottom: 1px solid #f5f6fa; }
+.panel-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.3px; }
+.panel-table td { padding: 6px 8px; border-bottom: 1px solid var(--bg-inset); }
 .escalation-banner { background: #d63031; color: #fff; padding: 8px 12px; border-radius: 4px; margin-top: 10px; font-size: 13px; font-weight: 600; }
 
 /* Response protocol */
-.response-protocol { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 24px; border-left: 4px solid #d63031; margin-bottom: 20px; }
-.response-protocol h3 { font-size: 16px; margin-bottom: 16px; color: #d63031; border-bottom: 1px solid #dfe6e9; padding-bottom: 10px; }
+.response-protocol { background: var(--bg-card); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow); padding: 24px; border-left: 4px solid #d63031; margin-bottom: 20px; }
+.response-protocol h3 { font-size: 16px; margin-bottom: 16px; color: #d63031; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
 .protocol-actions { display: flex; gap: 12px; flex-wrap: wrap; }
 .protocol-btn { padding: 10px 18px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
 .protocol-btn:hover { filter: brightness(0.9); }
-.btn-notify { background: #0984e3; color: #fff; }
+.btn-notify { background: var(--accent); color: #fff; }
 .btn-evacuate { background: #d63031; color: #fff; }
-.draft-output { margin-top: 16px; background: #f5f6fa; border-radius: 6px; padding: 16px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; font-family: -apple-system, BlinkMacSystemFont, sans-serif; position: relative; max-height: 400px; overflow-y: auto; }
-.draft-output .draft-header { font-weight: 700; font-size: 14px; margin-bottom: 8px; color: #2d3436; }
-.copy-btn { position: absolute; top: 8px; right: 8px; padding: 4px 12px; border: 1px solid #dfe6e9; border-radius: 4px; background: #fff; font-size: 12px; cursor: pointer; }
-.copy-btn:hover { background: #dfe6e9; }
+.draft-output { margin-top: 16px; background: var(--bg-inset); border-radius: 6px; padding: 16px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; font-family: -apple-system, BlinkMacSystemFont, sans-serif; position: relative; max-height: 400px; overflow-y: auto; color: var(--text-primary); }
+.draft-output .draft-header { font-weight: 700; font-size: 14px; margin-bottom: 8px; color: var(--text-primary); }
+.copy-btn { position: absolute; top: 8px; right: 8px; padding: 4px 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-card); color: var(--text-primary); font-size: 12px; cursor: pointer; }
+.copy-btn:hover { background: var(--bg-inset); }
 
 /* Instrument status */
 .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
 .status-active { background: #00b894; }
 .status-offline { background: #d63031; }
 .status-maintenance { background: #fdcb6e; }
-.status-unknown { background: #636e72; }
+.status-unknown { background: var(--text-secondary); }
 .trend-arrow { font-size: 14px; margin-left: 4px; }
 .trend-increasing { color: #d63031; }
 .trend-decreasing { color: #00b894; }
-.trend-stable { color: #636e72; }
+.trend-stable { color: var(--text-secondary); }
 .risk-badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
 .risk-critical { background: #d63031; color: #fff; }
 .risk-high { background: #e17055; color: #fff; }
 .risk-moderate { background: #fdcb6e; color: #2d3436; }
 .risk-low { background: #00b894; color: #fff; }
-.risk-unknown { background: #636e72; color: #fff; }
-.enhance-toggle { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 12px; background: #f5f6fa; border-radius: 4px; }
-.enhance-toggle button { padding: 4px 12px; border: 1px solid #0984e3; border-radius: 4px; background: #fff; color: #0984e3; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
-.enhance-toggle button.active { background: #0984e3; color: #fff; }
+.risk-unknown { background: var(--text-secondary); color: #fff; }
+.enhance-toggle { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 12px; background: var(--bg-inset); border-radius: 4px; }
+.enhance-toggle button { padding: 4px 12px; border: 1px solid var(--accent); border-radius: 4px; background: var(--bg-card); color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.enhance-toggle button.active { background: var(--accent); color: #fff; }
 .enhance-toggle button:hover { filter: brightness(0.95); }
 .obs-list { list-style: none; padding: 0; margin: 0; font-size: 13px; }
-.obs-list li { padding: 4px 0; border-bottom: 1px solid #f5f6fa; }
-.obs-label { color: #636e72; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; }
+.obs-list li { padding: 4px 0; border-bottom: 1px solid var(--bg-inset); }
+.obs-label { color: var(--text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; }
+
+/* News ticker */
+.news-ticker { position: relative; overflow: hidden; }
+.news-ticker table.panel-table { table-layout: fixed; width: 100%; }
+.news-ticker table.panel-table tbody { display: block; height: 200px; overflow: hidden; }
+.news-ticker table.panel-table thead, .news-ticker table.panel-table tbody tr { display: table; width: 100%; table-layout: fixed; }
+.news-ticker table.panel-table th:nth-child(1), .news-ticker table.panel-table td:nth-child(1) { width: 60%; }
+.news-ticker table.panel-table th:nth-child(2), .news-ticker table.panel-table td:nth-child(2) { width: 25%; }
+.news-ticker table.panel-table th:nth-child(3), .news-ticker table.panel-table td:nth-child(3) { width: 15%; }
+.news-ticker-row { transition: opacity 0.4s ease; }
+.news-ticker-row.hidden { opacity: 0; position: absolute; pointer-events: none; }
+.news-badge { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 9px; font-weight: 700; margin-left: 4px; vertical-align: middle; }
+.news-badge-academic { background: #6c5ce7; color: #fff; }
+.news-badge-media { background: var(--accent); color: #fff; }
+.news-ticker-dots { display: flex; justify-content: center; gap: 4px; margin-top: 8px; }
+.news-ticker-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); cursor: pointer; transition: background 0.2s; }
+.news-ticker-dot.active { background: var(--accent); }
 
 /* Analyst actions */
-.actions-card { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 24px; }
-.actions-card h3 { font-size: 16px; margin-bottom: 16px; color: #2d3436; border-bottom: 1px solid #dfe6e9; padding-bottom: 10px; }
+.actions-card { background: var(--bg-card); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow); padding: 24px; margin-bottom: 20px; }
+.actions-card h3 { font-size: 16px; margin-bottom: 16px; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 10px; }
 .action-row { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
 .action-row .btn-group { display: flex; gap: 8px; }
-.action-row button { padding: 8px 20px; border: 2px solid #dfe6e9; border-radius: 6px; background: #fff; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.15s; }
-.action-row button:hover { border-color: #0984e3; }
+.action-row button { padding: 8px 20px; border: 2px solid var(--border); border-radius: 6px; background: var(--bg-card); color: var(--text-primary); cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.15s; }
+.action-row button:hover { border-color: var(--accent); }
 .action-row button.active-Watch { background: #e17055; color: #fff; border-color: #e17055; }
 .action-row button.active-Warning { background: #fdcb6e; color: #2d3436; border-color: #fdcb6e; }
 .action-row button.active-Cleared { background: #00b894; color: #fff; border-color: #00b894; }
 .note-area { flex: 1; min-width: 250px; }
-.note-area textarea { width: 100%; height: 70px; padding: 10px; border: 2px solid #dfe6e9; border-radius: 6px; font-family: inherit; font-size: 13px; resize: vertical; }
-.note-area textarea:focus { outline: none; border-color: #0984e3; }
+.note-area textarea { width: 100%; height: 70px; padding: 10px; border: 2px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 13px; resize: vertical; background: var(--bg-card); color: var(--text-primary); }
+.note-area textarea:focus { outline: none; border-color: var(--accent); }
 .save-indicator { font-size: 13px; color: #00b894; margin-top: 8px; opacity: 0; transition: opacity 0.3s; }
 .save-indicator.visible { opacity: 1; }
 
 /* Empty state */
-.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #636e72; }
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-secondary); }
 .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
 .empty-state p { font-size: 16px; }
 
@@ -1070,7 +1313,7 @@ function renderFlagList() {
         html += '</div>';
     }
     if (filtered.length === 0) {
-        html = '<div style="padding:30px 20px;color:#636e72;text-align:center;">No flags match this filter</div>';
+        html = '<div style="padding:30px 20px;color:var(--text-secondary);text-align:center;">No flags match this filter</div>';
     }
     list.innerHTML = html;
 }
@@ -1161,6 +1404,28 @@ function renderDetail(flagId) {
     html += '</div>';
     html += '</div>';
 
+    // --- Analyst Classification (between flag overview and detail panels) ---
+    html += '<div class="actions-card">';
+    html += '<h3>Analyst Classification</h3>';
+    html += '<div class="action-row">';
+    html += '<div class="btn-group">';
+    var classes = ['Watch', 'Warning', 'Cleared'];
+    for (var i = 0; i < classes.length; i++) {
+        var c = classes[i];
+        var active = (st.classification === c) ? ' active-' + c : '';
+        html += '<button class="' + active + '" onclick="classify(' + flagId + ',\'' + c + '\')">' + c + '</button>';
+    }
+    html += '</div>';
+    html += '<div class="note-area">';
+    html += '<textarea id="noteInput" placeholder="Add analyst notes..." onchange="saveNote(' + flagId + ')">' + escapeHtml(st.note || '') + '</textarea>';
+    html += '</div>';
+    html += '</div>';
+    if (st.updated_at) {
+        html += '<div style="font-size:12px;color:var(--text-secondary);margin-top:10px;">Last updated: ' + escapeHtml(st.updated_at) + '</div>';
+    }
+    html += '<div class="save-indicator" id="saveIndicator">Saved</div>';
+    html += '</div>';
+
     // --- Info panels row 1: Voight + Elevation ---
     html += '<div class="info-panels">';
     html += '<div class="info-panel"><h3><span class="panel-icon">&#9888;</span> Failure Forecast (Voight)</h3><div class="panel-content" id="panel-voight"></div></div>';
@@ -1205,27 +1470,6 @@ function renderDetail(flagId) {
     html += '<div id="draftOutput"></div>';
     html += '</div>';
 
-    // Actions card
-    html += '<div class="actions-card">';
-    html += '<h3>Analyst Classification</h3>';
-    html += '<div class="action-row">';
-    html += '<div class="btn-group">';
-    var classes = ['Watch', 'Warning', 'Cleared'];
-    for (var i = 0; i < classes.length; i++) {
-        var c = classes[i];
-        var active = (st.classification === c) ? ' active-' + c : '';
-        html += '<button class="' + active + '" onclick="classify(' + flagId + ',\'' + c + '\')">' + c + '</button>';
-    }
-    html += '</div>';
-    html += '<div class="note-area">';
-    html += '<textarea id="noteInput" placeholder="Add analyst notes..." onchange="saveNote(' + flagId + ')">' + escapeHtml(st.note || '') + '</textarea>';
-    html += '</div>';
-    html += '</div>';
-    if (st.updated_at) {
-        html += '<div style="font-size:12px;color:#636e72;margin-top:10px;">Last updated: ' + escapeHtml(st.updated_at) + '</div>';
-    }
-    html += '<div class="save-indicator" id="saveIndicator">Saved</div>';
-    html += '</div>';
 
     body.innerHTML = html;
     var titleText = 'Flag ' + flagId;
@@ -1349,7 +1593,7 @@ function renderVoightPanel(flag) {
     var el = document.getElementById('panel-voight');
     if (!el) return;
     if (!flag.voight_fit || flag.voight_fit.r_squared == null) {
-        el.innerHTML = '<div class="panel-empty">No Voight analysis available.<br><span style="font-size:12px;">Run the full pipeline with time-series export to enable failure forecasting.</span></div>';
+        el.innerHTML = '<div class="panel-empty">No Voight analysis available.<br><span style="font-size:12px;">Inverse-velocity fit did not meet the R² threshold for this flag.</span></div>';
         return;
     }
     var v = flag.voight_fit;
@@ -1369,7 +1613,7 @@ function renderVoightPanel(flag) {
     html += panelMetric('Failure Date', v.predicted_failure_date || 'N/A', '');
     html += '</div>';
     if (v.failure_window) {
-        html += '<div style="font-size:12px;color:#636e72;margin-top:8px;">95% confidence window: ' + escapeHtml(v.failure_window) + '</div>';
+        html += '<div style="font-size:12px;color:var(--text-secondary);margin-top:8px;">95% confidence window: ' + escapeHtml(v.failure_window) + '</div>';
     }
     if (daysFromToday != null && daysFromToday <= 0) {
         html += '<div class="escalation-banner">Projected failure date has passed — immediate field verification required</div>';
@@ -1408,7 +1652,7 @@ function renderSentinelPanel(data, el) {
     html += panelMetric('Cloud Cover', data.scenes[0].cloud_pct != null ? data.scenes[0].cloud_pct : 'N/A', '%');
     html += panelMetric('Scenes (30d)', data.total_scenes, '');
     html += '</div>';
-    html += '<div style="font-size:12px;color:#636e72;margin-top:10px;">Recent scenes: ';
+    html += '<div style="font-size:12px;color:var(--text-secondary);margin-top:10px;">Recent scenes: ';
     for (var i = 0; i < Math.min(data.scenes.length, 5); i++) {
         if (i > 0) html += ', ';
         var s = data.scenes[i];
@@ -1439,21 +1683,21 @@ function renderExposurePanel(data, el) {
     cachedExposure = data;
     updateProtocolVisibility();
     if (data.unavailable) {
-        el.innerHTML = '<div class="panel-empty">Overpass API unavailable — settlement data could not be loaded.<br><span style="font-size:12px;color:#636e72;">Try reloading the page later.</span></div>';
+        el.innerHTML = '<div class="panel-empty">Overpass API unavailable — settlement data could not be loaded.<br><span style="font-size:12px;color:var(--text-secondary);">Try reloading the page later.</span></div>';
         return;
     }
     if (!data.features || data.features.length === 0) {
         el.innerHTML = '<div class="panel-empty">No settlements or infrastructure found within ' + (data.radius_km || 10) + ' km</div>';
         return;
     }
-    var html = '<div style="font-size:11px;color:#636e72;margin-bottom:8px;">Within ' + data.radius_km + ' km (straight-line, not flow-routed)</div>';
+    var html = '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;">Within ' + data.radius_km + ' km (straight-line, not flow-routed)</div>';
     html += '<table class="panel-table"><tr><th>Name</th><th>Type</th><th>Dist</th></tr>';
     for (var i = 0; i < data.features.length; i++) {
         var feat = data.features[i];
         var displayName = escapeHtml(feat.name);
-        if (feat.name_en) displayName += ' <span style="color:#636e72;font-size:12px;">(' + escapeHtml(feat.name_en) + ')</span>';
+        if (feat.name_en) displayName += ' <span style="color:var(--text-secondary);font-size:12px;">(' + escapeHtml(feat.name_en) + ')</span>';
         html += '<tr><td>' + displayName + '</td>';
-        html += '<td style="color:#636e72;">' + escapeHtml(feat.type) + '</td>';
+        html += '<td style="color:var(--text-secondary);">' + escapeHtml(feat.type) + '</td>';
         html += '<td>' + feat.distance_km.toFixed(1) + ' km</td></tr>';
     }
     html += '</table>';
@@ -1499,10 +1743,10 @@ function renderMonitoringPanel(data, el) {
     var st = STATE[fid] || {};
     var enhanced = st.enhanced_monitoring || false;
     html += '<div class="enhance-toggle">';
-    html += '<span style="font-size:12px;color:#636e72;">Enhanced Monitoring:</span>';
+    html += '<span style="font-size:12px;color:var(--text-secondary);">Enhanced Monitoring:</span>';
     html += '<button class="' + (enhanced ? 'active' : '') + '" onclick="toggleEnhancedMonitoring()">' + (enhanced ? 'Requested' : 'Request') + '</button>';
     if (st.enhanced_monitoring_at) {
-        html += '<span style="font-size:11px;color:#636e72;">since ' + escapeHtml(st.enhanced_monitoring_at) + '</span>';
+        html += '<span style="font-size:11px;color:var(--text-secondary);">since ' + escapeHtml(st.enhanced_monitoring_at) + '</span>';
     }
     html += '</div>';
     el.innerHTML = html;
@@ -1531,7 +1775,7 @@ function toggleEnhancedMonitoring() {
 
 function renderInstrumentsPanel(data, el) {
     if (data.message && (!data.instruments || data.instruments.length === 0)) {
-        el.innerHTML = '<div class="panel-empty">' + escapeHtml(data.message) + '<br><span style="font-size:12px;color:#636e72;">Place an instruments.json file in the data directory to display deployed sensors.</span></div>';
+        el.innerHTML = '<div class="panel-empty">' + escapeHtml(data.message) + '<br><span style="font-size:12px;color:var(--text-secondary);">Place an instruments.json file in the data directory to display deployed sensors.</span></div>';
         return;
     }
     if (!data.instruments || data.instruments.length === 0) {
@@ -1565,7 +1809,7 @@ function renderInstrumentsPanel(data, el) {
 
 function renderFieldReportsPanel(data, el) {
     if (data.message && (!data.reports || data.reports.length === 0)) {
-        el.innerHTML = '<div class="panel-empty">' + escapeHtml(data.message) + '<br><span style="font-size:12px;color:#636e72;">Place a field_reports.json file in the data directory to display reconnaissance data.</span></div>';
+        el.innerHTML = '<div class="panel-empty">' + escapeHtml(data.message) + '<br><span style="font-size:12px;color:var(--text-secondary);">Place a field_reports.json file in the data directory to display reconnaissance data.</span></div>';
         return;
     }
     if (!data.reports || data.reports.length === 0) {
@@ -1576,7 +1820,7 @@ function renderFieldReportsPanel(data, el) {
     for (var i = 0; i < data.reports.length; i++) {
         var rpt = data.reports[i];
         var riskClass = 'risk-' + (rpt.risk_assessment || 'unknown');
-        html += '<div style="padding:10px;background:#f5f6fa;border-radius:6px;margin-bottom:8px;">';
+        html += '<div style="padding:10px;background:var(--bg-inset);border-radius:6px;margin-bottom:8px;">';
         html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
         html += '<span style="font-weight:600;font-size:13px;">' + escapeHtml(rpt.date || 'Unknown date') + ' — ' + escapeHtml(rpt.author) + '</span>';
         html += '<span class="risk-badge ' + riskClass + '">' + escapeHtml((rpt.risk_assessment || 'unknown').toUpperCase()) + '</span>';
@@ -1597,30 +1841,89 @@ function renderFieldReportsPanel(data, el) {
             html += '</ul>';
         }
         if (rpt.notes) {
-            html += '<div style="font-size:12px;color:#636e72;margin-top:6px;font-style:italic;">' + escapeHtml(rpt.notes) + '</div>';
+            html += '<div style="font-size:12px;color:var(--text-secondary);margin-top:6px;font-style:italic;">' + escapeHtml(rpt.notes) + '</div>';
         }
         html += '</div>';
     }
     el.innerHTML = html;
 }
 
+var _newsInterval = null;
 function renderNewsPanel(data, el) {
+    if (_newsInterval) { clearInterval(_newsInterval); _newsInterval = null; }
     if (!data.articles || data.articles.length === 0) {
-        el.innerHTML = '<div class="panel-empty">No related articles found<br><span style="font-size:12px;color:#636e72;">Sources: OpenAlex, Crossref (academic and media)</span></div>';
+        el.innerHTML = '<div class="panel-empty">No related articles found<br><span style="font-size:12px;color:var(--text-secondary);">Sources: Google News, OpenAlex, Crossref</span></div>';
         return;
     }
-    var html = '<div style="font-size:11px;color:#636e72;margin-bottom:8px;">Related articles from academic and media sources (OpenAlex, Crossref)</div>';
-    html += '<table class="panel-table"><tr><th>Title</th><th>Source</th><th>Date</th></tr>';
-    for (var i = 0; i < data.articles.length; i++) {
-        var a = data.articles[i];
-        var titleHtml = escapeHtml(a.title);
-        if (a.url) titleHtml = safeLink(a.url, a.title);
-        html += '<tr><td style="max-width:400px;">' + titleHtml + '</td>';
-        html += '<td style="color:#636e72;font-size:12px;white-space:nowrap;">' + escapeHtml(a.source || a.provider) + '</td>';
-        html += '<td style="white-space:nowrap;">' + escapeHtml(a.date || '') + '</td></tr>';
+    var arts = data.articles;
+    var perPage = 5;
+    var pages = Math.ceil(arts.length / perPage);
+    var curPage = 0;
+
+    function fmtDate(d) {
+        if (!d) return '';
+        var m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (m) {
+            var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return m[3] + ' ' + months[parseInt(m[2],10)-1] + ' ' + m[1];
+        }
+        return d;
     }
-    html += '</table>';
-    el.innerHTML = html;
+
+    function renderPage(p) {
+        var start = p * perPage;
+        var end = Math.min(start + perPage, arts.length);
+        var rows = '';
+        for (var i = start; i < end; i++) {
+            var a = arts[i];
+            var titleHtml = escapeHtml(a.title);
+            if (a.url) titleHtml = safeLink(a.url, a.title);
+            rows += '<tr class="news-ticker-row"><td>' + titleHtml + '</td>';
+            rows += '<td style="color:var(--text-secondary);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(a.source || '') + '</td>';
+            rows += '<td style="white-space:nowrap;font-size:12px;">' + escapeHtml(fmtDate(a.date)) + '</td></tr>';
+        }
+        while (end - start < perPage) {
+            rows += '<tr class="news-ticker-row"><td>&nbsp;</td><td></td><td></td></tr>';
+            end++;
+        }
+        return rows;
+    }
+
+    function buildDots() {
+        if (pages <= 1) return '';
+        var d = '<div class="news-ticker-dots">';
+        for (var i = 0; i < pages; i++) {
+            d += '<span class="news-ticker-dot' + (i === curPage ? ' active' : '') + '" data-page="' + i + '"></span>';
+        }
+        d += '</div>';
+        return d;
+    }
+
+    var header = '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;">Related articles from media and academic sources</div>';
+    el.innerHTML = header + '<div class="news-ticker"><table class="panel-table"><thead><tr><th>Title</th><th>Source</th><th>Date</th></tr></thead><tbody id="newsRows">' + renderPage(0) + '</tbody></table>' + buildDots() + '</div>';
+
+    if (pages <= 1) return;
+
+    function showPage(p) {
+        curPage = p;
+        var tbody = document.getElementById('newsRows');
+        if (tbody) tbody.innerHTML = renderPage(p);
+        var dots = el.querySelectorAll('.news-ticker-dot');
+        for (var i = 0; i < dots.length; i++) {
+            dots[i].className = 'news-ticker-dot' + (i === p ? ' active' : '');
+        }
+    }
+
+    el.addEventListener('click', function(e) {
+        if (e.target.classList.contains('news-ticker-dot')) {
+            var p = parseInt(e.target.getAttribute('data-page'));
+            showPage(p);
+            if (_newsInterval) { clearInterval(_newsInterval); }
+            _newsInterval = setInterval(function() { showPage((curPage + 1) % pages); }, 5000);
+        }
+    });
+
+    _newsInterval = setInterval(function() { showPage((curPage + 1) % pages); }, 5000);
 }
 
 // ---- Response Protocol ----
@@ -1805,7 +2108,7 @@ function copyDraft() {
 
 // ---- Timeseries SVG ----
 function renderTimeseriesSVG(dates, values, flagId) {
-    var w = 700, h = 200, pad = 50;
+    var w = 700, h = 200, pad = 70;
     var n = dates.length;
     if (n < 2) return '<div class="no-data">Insufficient data points</div>';
     var vmin = Math.min.apply(null, values);
@@ -1814,16 +2117,22 @@ function renderTimeseriesSVG(dates, values, flagId) {
     var margin = (vmax - vmin) * 0.1;
     vmin -= margin; vmax += margin;
 
+    var cs = getComputedStyle(document.documentElement);
+    var cAxis = cs.getPropertyValue('--chart-axis').trim() || '#636e72';
+    var cGrid = cs.getPropertyValue('--chart-grid').trim() || '#dfe6e9';
+    var cLine = cs.getPropertyValue('--chart-line').trim() || '#0984e3';
+    var cLabel = cs.getPropertyValue('--chart-label').trim() || '#2d3436';
+
     var svg = '<svg viewBox="0 0 ' + (w + 2 * pad) + ' ' + (h + 2 * pad) + '" style="max-width:100%;height:auto;">';
-    svg += '<line x1="' + pad + '" y1="' + (h + pad) + '" x2="' + (w + pad) + '" y2="' + (h + pad) + '" stroke="#636e72" stroke-width="1"/>';
-    svg += '<line x1="' + pad + '" y1="' + pad + '" x2="' + pad + '" y2="' + (h + pad) + '" stroke="#636e72" stroke-width="1"/>';
+    svg += '<line x1="' + pad + '" y1="' + (h + pad) + '" x2="' + (w + pad) + '" y2="' + (h + pad) + '" stroke="' + cAxis + '" stroke-width="1"/>';
+    svg += '<line x1="' + pad + '" y1="' + pad + '" x2="' + pad + '" y2="' + (h + pad) + '" stroke="' + cAxis + '" stroke-width="1"/>';
     for (var y = 0; y <= 4; y++) {
         var yv = vmin + (vmax - vmin) * y / 4;
         var yp = h + pad - (y / 4) * h;
         var range = vmax - vmin;
         var dp = range < 0.1 ? 4 : range < 1 ? 3 : 2;
-        svg += '<text x="' + (pad - 5) + '" y="' + yp + '" text-anchor="end" font-size="10" fill="#636e72">' + yv.toFixed(dp) + '</text>';
-        svg += '<line x1="' + pad + '" y1="' + yp + '" x2="' + (w + pad) + '" y2="' + yp + '" stroke="#dfe6e9" stroke-width="0.5"/>';
+        svg += '<text x="' + (pad - 8) + '" y="' + yp + '" text-anchor="end" font-size="10" fill="' + cAxis + '">' + yv.toFixed(dp) + '</text>';
+        svg += '<line x1="' + pad + '" y1="' + yp + '" x2="' + (w + pad) + '" y2="' + yp + '" stroke="' + cGrid + '" stroke-width="0.5"/>';
     }
     var points = '';
     for (var i = 0; i < n; i++) {
@@ -1831,20 +2140,20 @@ function renderTimeseriesSVG(dates, values, flagId) {
         var yVal = h + pad - ((values[i] - vmin) / (vmax - vmin)) * h;
         points += x + ',' + yVal + ' ';
     }
-    svg += '<polyline points="' + points.trim() + '" fill="none" stroke="#0984e3" stroke-width="2"/>';
+    svg += '<polyline points="' + points.trim() + '" fill="none" stroke="' + cLine + '" stroke-width="2"/>';
     for (var i = 0; i < n; i++) {
         var x = pad + (i / (n - 1)) * w;
         var yVal = h + pad - ((values[i] - vmin) / (vmax - vmin)) * h;
-        svg += '<circle cx="' + x + '" cy="' + yVal + '" r="3" fill="#0984e3"/>';
+        svg += '<circle cx="' + x + '" cy="' + yVal + '" r="3" fill="' + cLine + '"/>';
     }
     var xLabels = [0, Math.floor(n / 2), n - 1];
     for (var k = 0; k < xLabels.length; k++) {
         var idx = xLabels[k];
         var x = pad + (idx / (n - 1)) * w;
-        svg += '<text x="' + x + '" y="' + (h + pad + 16) + '" text-anchor="middle" font-size="10" fill="#636e72">' + dates[idx] + '</text>';
+        svg += '<text x="' + x + '" y="' + (h + pad + 16) + '" text-anchor="middle" font-size="10" fill="' + cAxis + '">' + dates[idx] + '</text>';
     }
-    svg += '<text x="' + (w / 2 + pad) + '" y="' + (h + pad + 35) + '" text-anchor="middle" font-size="12" fill="#2d3436">Date</text>';
-    svg += '<text transform="rotate(-90)" x="' + (-(h / 2 + pad)) + '" y="14" text-anchor="middle" font-size="12" fill="#2d3436">Displacement (m)</text>';
+    svg += '<text x="' + (w / 2 + pad) + '" y="' + (h + pad + 35) + '" text-anchor="middle" font-size="12" fill="' + cLabel + '">Date</text>';
+    svg += '<text transform="rotate(-90)" x="' + (-(h / 2 + pad)) + '" y="14" text-anchor="middle" font-size="12" fill="' + cLabel + '">Displacement (m)</text>';
     svg += '</svg>';
     return svg;
 }
@@ -1887,10 +2196,30 @@ function showSaved() {
     }
 }
 
+// ---- Theme toggle ----
+function toggleTheme() {
+    var root = document.documentElement;
+    var cur = root.getAttribute('data-theme');
+    if (cur === 'dark') { root.setAttribute('data-theme', 'light'); }
+    else if (cur === 'light') { root.removeAttribute('data-theme'); }
+    else { root.setAttribute('data-theme', 'dark'); }
+    updateThemeIcon();
+}
+function updateThemeIcon() {
+    var btn = document.getElementById('themeToggle');
+    if (!btn) return;
+    var dark = document.documentElement.getAttribute('data-theme') === 'dark' ||
+        (!document.documentElement.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    btn.textContent = dark ? '☀' : '☾';
+}
+updateThemeIcon();
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateThemeIcon);
+
 // Initial render
 renderStats();
 renderFlagList();
 </script>
+<button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle dark mode">&#9790;</button>
 </body>
 </html>
 """
@@ -1987,7 +2316,7 @@ def make_handler(
             elif path == "/api/news":
                 region = params.get("region", [""])[0]
                 self._handle_geo_api(params, lambda lat, lon: _cached_call(
-                    f"news:{region or 'default'}",
+                    f"news:{lat:.2f},{lon:.2f}:{region or 'default'}",
                     _get_news, lat, lon, region,
                     ttl=3600,
                 ))
