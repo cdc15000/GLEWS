@@ -51,6 +51,33 @@ def _severity_from_score(score: float) -> str:
     return "INFO"
 
 
+def _reclassify_post_events(flags: list[dict], event_date: str | None) -> None:
+    """Downgrade CRITICAL flags whose predicted failure is in the past to POST-EVENT."""
+    from datetime import date
+
+    if event_date:
+        try:
+            ref = date.fromisoformat(event_date)
+        except ValueError:
+            ref = date.today()
+    else:
+        ref = date.today()
+
+    for f in flags:
+        if f.get("severity") != "CRITICAL":
+            continue
+        pfd = f.get("predicted_failure_date") or (
+            f.get("voight_fit", {}) or {}
+        ).get("predicted_failure_date")
+        if not pfd:
+            continue
+        try:
+            if date.fromisoformat(pfd) < ref:
+                f["severity"] = "POST-EVENT"
+        except ValueError:
+            pass
+
+
 def _sanitize_for_json(value):
     """Replace non-finite floats with None so browser JSON.parse succeeds."""
     if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
@@ -1016,6 +1043,9 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     --bg-page: #f5f6fa;
     --bg-card: #fff;
     --bg-inset: #f5f6fa;
+    --banner-bg: #fff3cd;
+    --banner-fg: #7a5a00;
+    --banner-border: #f0d78c;
     --text-primary: #2d3436;
     --text-secondary: #636e72;
     --text-muted: #b2bec3;
@@ -1037,6 +1067,9 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     --bg-page: #1a1a2e;
     --bg-card: #16213e;
     --bg-inset: #1a1a2e;
+    --banner-bg: #3a2f0b;
+    --banner-fg: #f5d77a;
+    --banner-border: #6b5414;
     --text-primary: #e0e0e0;
     --text-secondary: #a0a0b0;
     --text-muted: #6c6c80;
@@ -1058,6 +1091,9 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     --bg-page: #1a1a2e;
     --bg-card: #16213e;
     --bg-inset: #1a1a2e;
+    --banner-bg: #3a2f0b;
+    --banner-fg: #f5d77a;
+    --banner-border: #6b5414;
     --text-primary: #e0e0e0;
     --text-secondary: #a0a0b0;
     --text-muted: #6c6c80;
@@ -1105,6 +1141,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .flag-item.selected .flag-meta { color: var(--text-muted); }
 .severity-badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
 .severity-CRITICAL { background: #d63031; color: #fff; }
+.severity-POST-EVENT { background: #636e72; color: #fff; }
 .severity-WARNING { background: #fdcb6e; color: #2d3436; }
 .severity-INFO { background: #74b9ff; color: #2d3436; }
 .classification-badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-left: 6px; }
@@ -1120,6 +1157,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .main-header { padding: 20px 30px; background: var(--bg-card); border-bottom: 1px solid var(--border); }
 .main-header h2 { font-size: 20px; color: var(--text-primary); }
+.data-banner { padding: 8px 30px; background: var(--banner-bg); color: var(--banner-fg); border-bottom: 1px solid var(--banner-border); font-size: 13px; line-height: 1.4; }
+.data-banner strong { letter-spacing: 0.06em; margin-right: 6px; }
 .main-body { flex: 1; overflow-y: auto; padding: 30px; }
 
 /* Detail card */
@@ -1169,8 +1208,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .btn-evacuate { background: #d63031; color: #fff; }
 .draft-output { margin-top: 16px; background: var(--bg-inset); border-radius: 6px; padding: 16px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; font-family: -apple-system, BlinkMacSystemFont, sans-serif; position: relative; max-height: 400px; overflow-y: auto; color: var(--text-primary); }
 .draft-output .draft-header { font-weight: 700; font-size: 14px; margin-bottom: 8px; color: var(--text-primary); }
-.copy-btn { position: absolute; top: 8px; right: 8px; padding: 4px 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-card); color: var(--text-primary); font-size: 12px; cursor: pointer; }
-.copy-btn:hover { background: var(--bg-inset); }
+.draft-btn-group { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; }
+.copy-btn, .close-draft-btn { padding: 4px 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-card); color: var(--text-primary); font-size: 12px; cursor: pointer; }
+.copy-btn:hover, .close-draft-btn:hover { background: var(--bg-inset); }
+@keyframes marker-pulse { 0% { r: 10; opacity: 0.9; } 50% { r: 16; opacity: 0.4; } 100% { r: 10; opacity: 0.9; } }
 
 /* Instrument status */
 .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
@@ -1249,12 +1290,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     <div class="sidebar-filter">
         <button class="active" onclick="filterFlags('ALL')">All</button>
         <button onclick="filterFlags('CRITICAL')">Critical</button>
+        <button onclick="filterFlags('POST-EVENT')">Post-Event</button>
         <button onclick="filterFlags('WARNING')">Warning</button>
         <button onclick="filterFlags('INFO')">Info</button>
     </div>
     <div class="flag-list" id="flagList"></div>
 </div>
 <div class="main">
+    $$DATA_BANNER$$
     <div class="main-header">
         <h2 id="mainTitle">Tier 2 Analyst Review</h2>
     </div>
@@ -1320,9 +1363,10 @@ function renderFlagList() {
 
 function renderStats() {
     var total = FLAGS.length;
-    var crit = 0, warn = 0, info = 0;
+    var crit = 0, post = 0, warn = 0, info = 0;
     for (var i = 0; i < FLAGS.length; i++) {
         if (FLAGS[i].severity === 'CRITICAL') crit++;
+        else if (FLAGS[i].severity === 'POST-EVENT') post++;
         else if (FLAGS[i].severity === 'WARNING') warn++;
         else info++;
     }
@@ -1330,6 +1374,7 @@ function renderStats() {
     el.innerHTML =
         '<div class="stat"><div class="stat-value">' + total + '</div><div class="stat-label">Total</div></div>' +
         '<div class="stat"><div class="stat-value critical">' + crit + '</div><div class="stat-label">Critical</div></div>' +
+        '<div class="stat"><div class="stat-value" style="color:#636e72">' + post + '</div><div class="stat-label">Post-Event</div></div>' +
         '<div class="stat"><div class="stat-value warning">' + warn + '</div><div class="stat-label">Warning</div></div>' +
         '<div class="stat"><div class="stat-value info">' + info + '</div><div class="stat-label">Info</div></div>';
 }
@@ -1424,6 +1469,15 @@ function renderDetail(flagId) {
         html += '<div style="font-size:12px;color:var(--text-secondary);margin-top:10px;">Last updated: ' + escapeHtml(st.updated_at) + '</div>';
     }
     html += '<div class="save-indicator" id="saveIndicator">Saved</div>';
+    // Response protocol (inside Analyst Classification, shown when Voight escalation triggers)
+    html += '<div id="responseProtocol" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">';
+    html += '<h4 style="font-size:14px;color:#d63031;margin-bottom:10px;">Response Protocol</h4>';
+    html += '<div class="protocol-actions">';
+    html += '<button class="protocol-btn btn-notify" onclick="draftNotification()">Draft Authority Notification</button>';
+    html += '<button class="protocol-btn btn-evacuate" onclick="draftEvacuation()">Draft Evacuation Advisory</button>';
+    html += '</div>';
+    html += '<div id="draftOutput"></div>';
+    html += '</div>';
     html += '</div>';
 
     // --- Info panels row 1: Voight + Elevation ---
@@ -1458,16 +1512,6 @@ function renderDetail(flagId) {
     // --- Info panels row 6: News Feed ---
     html += '<div class="info-panels">';
     html += '<div class="info-panel" style="grid-column: 1 / -1;"><h3><span class="panel-icon">&#128240;</span> News Feed</h3><div class="panel-content" id="panel-news"></div></div>';
-    html += '</div>';
-
-    // Response protocol (shown when Voight escalation triggers)
-    html += '<div class="response-protocol" id="responseProtocol" style="display:none;">';
-    html += '<h3>Response Protocol</h3>';
-    html += '<div class="protocol-actions">';
-    html += '<button class="protocol-btn btn-notify" onclick="draftNotification()">Draft Authority Notification</button>';
-    html += '<button class="protocol-btn btn-evacuate" onclick="draftEvacuation()">Draft Evacuation Advisory</button>';
-    html += '</div>';
-    html += '<div id="draftOutput"></div>';
     html += '</div>';
 
 
@@ -1517,12 +1561,30 @@ function initMap(flag) {
     dashMap = L.map('flagMap', { layers: [osm] }).setView([flag.center_lat, flag.center_lon], 13);
     L.control.layers({ 'Street': osm, 'Satellite': satellite }).addTo(dashMap);
 
-    var sevColors = {CRITICAL: '#d63031', WARNING: '#fdcb6e', INFO: '#74b9ff'};
+    var sevColors = {CRITICAL: '#d63031', WARNING: '#fdcb6e', INFO: '#74b9ff', 'POST-EVENT': '#636e72'};
     for (var i = 0; i < FLAGS.length; i++) {
         var fl = FLAGS[i];
         if (fl.center_lat == null || fl.center_lon == null) continue;
         var col = sevColors[fl.severity] || '#636e72';
         var isSelected = (fl.flag_id === flag.flag_id);
+        if (isSelected) {
+            var pulseIcon = L.divIcon({
+                className: '',
+                html: '<svg width="60" height="60" viewBox="0 0 60 60" style="overflow:visible;">' +
+                      '<circle cx="30" cy="30" r="12" fill="none" stroke="' + col + '" stroke-width="3" stroke-opacity="0.8">' +
+                      '<animate attributeName="r" values="12;26;12" dur="1.8s" repeatCount="indefinite"/>' +
+                      '<animate attributeName="stroke-opacity" values="0.8;0;0.8" dur="1.8s" repeatCount="indefinite"/>' +
+                      '<animate attributeName="stroke-width" values="3;1;3" dur="1.8s" repeatCount="indefinite"/>' +
+                      '</circle>' +
+                      '<circle cx="30" cy="30" r="12" fill="none" stroke="' + col + '" stroke-width="2" stroke-opacity="0.5">' +
+                      '<animate attributeName="r" values="12;20;12" dur="1.8s" begin="0.3s" repeatCount="indefinite"/>' +
+                      '<animate attributeName="stroke-opacity" values="0.5;0;0.5" dur="1.8s" begin="0.3s" repeatCount="indefinite"/>' +
+                      '</circle></svg>',
+                iconSize: [60, 60],
+                iconAnchor: [30, 30]
+            });
+            L.marker([fl.center_lat, fl.center_lon], {icon: pulseIcon, interactive: false, pane: 'markerPane'}).addTo(dashMap);
+        }
         L.circleMarker([fl.center_lat, fl.center_lon], {
             radius: isSelected ? 10 : 5,
             color: isSelected ? '#fff' : col,
@@ -2091,10 +2153,18 @@ function showDraft(text) {
     var el = document.getElementById('draftOutput');
     if (!el) return;
     var html = '<div class="draft-output">';
+    html += '<div class="draft-btn-group">';
     html += '<button class="copy-btn" onclick="copyDraft()">Copy</button>';
+    html += '<button class="close-draft-btn" onclick="closeDraft()">Close</button>';
+    html += '</div>';
     html += '<pre style="margin:0;white-space:pre-wrap;font-family:inherit;font-size:inherit;" id="draftText">' + escapeHtml(text) + '</pre>';
     html += '</div>';
     el.innerHTML = html;
+}
+
+function closeDraft() {
+    var el = document.getElementById('draftOutput');
+    if (el) el.innerHTML = '';
 }
 
 function copyDraft() {
@@ -2225,7 +2295,30 @@ renderFlagList();
 """
 
 
-def _render_html(flags: list[dict], state: dict, site_name: str) -> str:
+def load_data_source(data_dir: str | Path) -> str | None:
+    """Return the ``data_source`` tag from flags.geojson collection properties."""
+    path = Path(data_dir) / "flags.geojson"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text()).get("properties", {}).get("data_source")
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _data_banner_html(data_source: str | None) -> str:
+    if data_source == "synthetic":
+        return (
+            '<div class="data-banner" role="status"><strong>SYNTHETIC DATA</strong>'
+            "Flags, displacement series and failure forecasts are generated for "
+            "demonstration and do not represent observed ground motion.</div>"
+        )
+    return ""
+
+
+def _render_html(
+    flags: list[dict], state: dict, site_name: str, data_source: str | None = None
+) -> str:
     """Render the dashboard HTML with flag data injected."""
     flags_json = json.dumps(flags, default=str)
     state_json = json.dumps(state)
@@ -2233,6 +2326,7 @@ def _render_html(flags: list[dict], state: dict, site_name: str) -> str:
     html = html.replace("$$FLAGS_JSON$$", flags_json)
     html = html.replace("$$STATE_JSON$$", state_json)
     html = html.replace("$$SITE_NAME$$", site_name)
+    html = html.replace("$$DATA_BANNER$$", _data_banner_html(data_source))
     return html
 
 
@@ -2241,7 +2335,8 @@ def _render_html(flags: list[dict], state: dict, site_name: str) -> str:
 # ---------------------------------------------------------------------------
 
 def make_handler(
-    flags: list[dict], state: dict, state_path: Path, site_name: str
+    flags: list[dict], state: dict, state_path: Path, site_name: str,
+    data_source: str | None = None,
 ):
     """
     Factory that returns a BaseHTTPRequestHandler subclass bound to
@@ -2258,7 +2353,7 @@ def make_handler(
             params = parse_qs(parsed.query)
 
             if path in ("/", "/index.html"):
-                html = _render_html(flags, state, site_name)
+                html = _render_html(flags, state, site_name, data_source)
                 self._respond(200, "text/html; charset=utf-8", html.encode("utf-8"))
 
             elif path == "/api/flags":
@@ -2454,13 +2549,16 @@ def serve(data_dir: str, port: int, config: dict) -> None:
     state_path = data_path / "dashboard_state.json"
 
     site_name = config.get("site", {}).get("name", "GLEWS Site")
+    event_date = config.get("site", {}).get("event_date")
 
     flags = load_flags(data_path)
+    _reclassify_post_events(flags, event_date)
     state = load_state(state_path)
 
     _resolve_flag_place_names(flags, data_path)
+    data_source = load_data_source(data_path)
 
-    handler_cls = make_handler(flags, state, state_path, site_name)
+    handler_cls = make_handler(flags, state, state_path, site_name, data_source)
 
     try:
         from http.server import ThreadingHTTPServer

@@ -299,6 +299,7 @@ def demo(output: str, no_plots: bool) -> None:
             },
         }
     cfg["site"]["name"] = "Nepal-Tibet Border 2026 (Synthetic Demo)"
+    cfg["site"]["data_source"] = "synthetic"
 
     # Step 1: Generate synthetic data
     click.echo("Step 1/3  Generating synthetic InSAR data...")

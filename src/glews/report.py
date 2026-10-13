@@ -113,7 +113,10 @@ def generate_report(
     _plot_acceleration_evolution(flags[:5], accel_map, fig_dir, site_name)
 
     # 4. GeoJSON export
-    geojson_path = _export_geojson(flags, assessments, output_dir)
+    geojson_path = _export_geojson(
+        flags, assessments, output_dir,
+        data_source=config.get("site", {}).get("data_source"),
+    )
 
     # 5. Summary text report
     report_path = output_dir / "report.md"
@@ -240,6 +243,7 @@ def _export_geojson(
     flags: list[AnomalyFlag],
     assessments: list[CascadeAssessment] | None,
     output_dir: Path,
+    data_source: str | None = None,
 ) -> Path:
     """Export flags as GeoJSON for viewing in QGIS, Google Earth, etc."""
     assessment_map = {}
@@ -300,6 +304,8 @@ def _export_geojson(
             "n_flags": len(flags),
         },
     }
+    if data_source:
+        geojson["properties"]["data_source"] = data_source
 
     path = output_dir / "flags.geojson"
     path.write_text(json.dumps(geojson, indent=2, default=_json_default))

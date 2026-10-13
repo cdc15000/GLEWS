@@ -1,23 +1,34 @@
-# GLEWS Site Configuration — Nepal 2026 Glacier-Rock Collapse
-# 26 August 2026, Nepal–Tibet border near Tatopani
+# GLEWS Site Configuration — Gyirong–Rasuwa disaster, 26 August 2026
+# Rock–ice avalanche from the north face of Langtang Lirung, Rasuwa, Nepal
 #
 # This configuration defines the study area, data acquisition parameters,
 # processing settings, and anomaly detection thresholds for the PoC
 # retrospective analysis.
+#
+# Event facts from ICIMOD (2026), "Understanding the Gyirong–Rasuwa disaster
+# of 26 August 2026: A preliminary synthesis", doi:10.53055/ICIMOD.1150
 
 site:
-  name: "Nepal-Tibet Border 2026"
+  name: "Gyirong–Rasuwa 2026"
   event_date: "2026-08-26"
   description: >
-    Glacier-rock collapse that triggered a catastrophic flash flood
-    near the Nepal-Tibet border. More than 1,000 confirmed dead.
-    Satellite radar showed acceleration ≥7 days before collapse.
+    At 08:37 NPT on 26 August 2026 ~132 Mm³ of rock (~115 Mm³) and glacier
+    ice (~17 Mm³) detached from the north face of Langtang Lirung at
+    ~5,200 masl and fell ~1,200 m into the Lhende Khola. The resulting
+    debris surge reached the Gyirong–Rasuwagadhi border corridor in ~7 min
+    and continued down the Bhotekoshi–Trishuli. Not a GLOF; no heavy
+    rainfall preceded it. Nepal: 1,451 dead, 5,745 missing (NDRRMA,
+    21 Sep 2026); China: 43 dead, 519 missing. Sentinel-1 InSAR showed up
+    to 40 cm LOS displacement over the source between 7 Jul and 24 Aug 2026;
+    NISAR showed up to ~30 cm between 26 Jul and 19 Aug.
 
-  # Approximate collapse source coordinates (WGS84)
-  # Refine as post-event analyses are published
-  latitude: 28.20
-  longitude: 85.90
-  buffer_km: 15  # search radius around point
+  # Approximate source zone, just north of the Langtang Lirung summit
+  # (28.2556N, 85.5194E). The report gives no release coordinates; refine
+  # from its Figure 9 or Copernicus EMSR927 mapping.
+  latitude: 28.27
+  longitude: 85.51
+  # 20 km reaches Rasuwagadhi (~13 km W) so exposure covers the struck corridor
+  buffer_km: 20
 
 acquire:
   platform: SENTINEL-1
@@ -105,10 +116,10 @@ detect:
   #   min_displacement_range_m: 0.01  # skip near-static pixels (cost guard)
 
   # Step-change detection — catches abrupt, single-epoch displacement
-  # jumps (e.g. 3.5 m in one 12-day cycle, as in the Nepal 2026
-  # collapse) that the acceleration detector's trend model misses,
-  # since velocity decelerates after the rupture instead of climbing
-  # smoothly like Voight's law assumes.
+  # jumps that the acceleration detector's trend model misses, since
+  # velocity decelerates after a rupture instead of climbing smoothly
+  # like Voight's law assumes. The 2026 precursor was gradual (~8 mm/day
+  # LOS, ~10 cm per 12-day pair), well below min_displacement_m.
   step_change:
     # Number of baseline standard deviations an inter-epoch jump
     # must exceed to be flagged
