@@ -22,11 +22,12 @@ site:
     to 40 cm LOS displacement over the source between 7 Jul and 24 Aug 2026;
     NISAR showed up to ~30 cm between 26 Jul and 19 Aug.
 
-  # Approximate source zone, just north of the Langtang Lirung summit
-  # (28.2556N, 85.5194E). The report gives no release coordinates; refine
-  # from its Figure 9 or Copernicus EMSR927 mapping.
-  latitude: 28.27
-  longitude: 85.51
+  # Failed rock slope core, read from the lat/lon axes of ICIMOD (2026)
+  # Figure 9 (Sentinel-1 LOS displacement, 7 Jul-24 Aug). Failed rock
+  # slope spans ~28.284-28.293N, 85.519-85.530E; failed glacier extends
+  # north to ~28.296N. ~3.6 km N of the Langtang Lirung summit.
+  latitude: 28.288
+  longitude: 85.524
   # 20 km reaches Rasuwagadhi (~13 km W) so exposure covers the struck corridor
   buffer_km: 20
 

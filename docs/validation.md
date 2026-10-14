@@ -8,7 +8,7 @@ Validation of GLEWS detection algorithms against four glacier and rock-slope col
 
 | Event | Location | Date | Type | Lead Time | Key Detection Metric | Data Source |
 |-------|----------|------|------|-----------|---------------------|-------------|
-| Gyirong–Rasuwa (Nepal–Tibet)\* | 28.1°N, 85.9°E (analysed); source at ~28.27°N, 85.51°E | 26 Aug 2026 | Real | 43 days\* | 5.06 m vertical subsidence; 295 GOFF flags\* | NISAR GOFF L-band |
+| Gyirong–Rasuwa (Nepal–Tibet)\* | 28.1°N, 85.9°E (analysed); source at 28.288°N, 85.524°E (ICIMOD Fig. 9) | 26 Aug 2026 | Real | 43 days\* | 5.06 m vertical subsidence; 295 GOFF flags\* | NISAR GOFF L-band |
 | Weisshorn (Randa) | 46.1°N, 7.8°E | Ongoing slow deformation | Real | N/A | **81 mm** cumulative displacement | Sentinel-1 C-band |
 | Chamoli | 30.4°N, 79.7°E | 7 Feb 2021 | Synthetic | **~30 days** | Acceleration z-score > 3 sigma | Synthetic |
 | Aru Glaciers | 34.0°N, 82.2°E | 17 Jul 2016 | Synthetic | **39–54 days** | Dual-glacier precursor signal | Synthetic |
@@ -79,7 +79,7 @@ The original retrospective run was centred at 28.1°N, 85.9°E, chosen from earl
 
 ### Next steps
 
-- Re-run with `config/nepal_2026.yaml`, now centred on the source (28.27°N, 85.51°E, 20 km buffer), using both Sentinel-1 and NISAR.
+- Re-run with `config/nepal_2026.yaml`, now centred on the source (28.288°N, 85.524°E from ICIMOD Fig. 9, 20 km buffer), using both Sentinel-1 and NISAR.
 - Refine the source polygon from ICIMOD Figure 9 or Copernicus EMSR927 mapping.
 - Compare GLEWS displacement against the ICIMOD-reported 40 cm (Sentinel-1) and ~30 cm (NISAR) figures before claiming a lead time.
 

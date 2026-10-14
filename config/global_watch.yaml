@@ -103,9 +103,9 @@ sites:
         corridor (ICIMOD 2026, doi:10.53055/ICIMOD.1150). Nepal: 1,451
         dead, 5,745 missing; China: 43 dead, 519 missing. Kept in the
         watch list to validate continued post-event stability.
-      # Approximate source zone; see config/nepal_2026.yaml
-      latitude: 28.27
-      longitude: 85.51
+      # Failed rock slope core (ICIMOD 2026 Fig. 9); see config/nepal_2026.yaml
+      latitude: 28.288
+      longitude: 85.524
       elevation_m: 5200
       hazard_type: "rock-ice avalanche"
       priority: "CRITICAL"

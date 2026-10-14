@@ -17,6 +17,7 @@ glews/pyvenv.cfg
 
 # Data — large satellite products
 notebooks/data/nisar/
+data/nisar/
 *.h5
 *.hdf5
 
