@@ -8,12 +8,12 @@ Validation of GLEWS detection algorithms against four glacier and rock-slope col
 
 | Event | Location | Date | Type | Lead Time | Key Detection Metric | Data Source |
 |-------|----------|------|------|-----------|---------------------|-------------|
-| Gyirong–Rasuwa (Nepal–Tibet)\* | 28.1°N, 85.9°E (analysed); source at 28.288°N, 85.524°E (ICIMOD Fig. 9) | 26 Aug 2026 | Real | 43 days\* | 5.06 m vertical subsidence; 295 GOFF flags\* | NISAR GOFF L-band |
+| Gyirong–Rasuwa (Nepal–Tibet) | Source 28.288°N, 85.524°E (ICIMOD Fig. 9) | 26 Aug 2026 | Real | **Not detected** at source | Failed slope unreliably unwrapped; ≈ −5 cm vs ICIMOD ~30 cm; 53 flags/144 km² | NISAR GUNW L-band (track 98) |
 | Weisshorn (Randa) | 46.1°N, 7.8°E | Ongoing slow deformation | Real | N/A | **81 mm** cumulative displacement | Sentinel-1 C-band |
 | Chamoli | 30.4°N, 79.7°E | 7 Feb 2021 | Synthetic | **~30 days** | Acceleration z-score > 3 sigma | Synthetic |
 | Aru Glaciers | 34.0°N, 82.2°E | 17 Jul 2016 | Synthetic | **39–54 days** | Dual-glacier precursor signal | Synthetic |
 
-\* Measured over the original study area, ~38 km east of the Langtang Lirung source identified by ICIMOD (2026). These figures do not show that GLEWS detected the precursor at the source. Re-analysis centred on the source is pending; see Event 1.
+An earlier run over 28.1°N, 85.9°E, ~38 km east of the source, reported 43 days of lead time and 5.06 m of subsidence. Those figures do not apply to this collapse; see Event 1.
 
 ---
 
@@ -38,7 +38,7 @@ All four events were processed through the same GLEWS Tier 0 detection pipeline:
 
 ---
 
-## Event 1: Gyirong–Rasuwa 2026 (Real; re-analysis pending)
+## Event 1: Gyirong–Rasuwa 2026 (Real)
 
 ### Event description
 
@@ -51,7 +51,7 @@ ICIMOD's preliminary synthesis (2026) gives the following account:
 - Precursor motion was visible from space. Sentinel-1 InSAR showed up to 40 cm line-of-sight displacement over the source between 7 July and 24 August (48 days); NISAR showed up to ~30 cm between 26 July and 19 August.
 - The source glacier moved ~29 m/yr over 2014–2024 with no clear acceleration, so long-term velocity alone would not have marked it out.
 
-### What GLEWS analysed
+### Original run (wrong area)
 
 The original retrospective run was centred at 28.1°N, 85.9°E, chosen from early press reports before the source was known. That point is ~38 km east of the Langtang Lirung source. The results below come from that area, not from the collapse source.
 
@@ -69,19 +69,55 @@ The original retrospective run was centred at 28.1°N, 85.9°E, chosen from earl
 
 ### Interpretation
 
-1. **The lead time is not yet validated.** Because the analysed area does not contain the source, the 43-day figure shows that the detectors fire on real NISAR data. It does not show they would have warned of this collapse. The signals found 38 km away need their own explanation, whether that is unrelated slope motion, glacier flow or processing artefacts.
+1. **The 43-day lead time does not apply to this collapse.** Because the original area does not contain the source, the 43-day figure shows only that the detectors fire on real NISAR data. The re-analysis below found no comparable detection at the source. The signals found 38 km away need their own explanation, whether that is unrelated slope motion, glacier flow or processing artefacts.
 
 2. **No two-phase failure at the source.** An earlier version of this report described a "two-phase step-change failure" based on the two BOCPD changepoints above. ICIMOD describes gradual precursor motion at the source (40 cm over 48 days, ~8 mm/day LOS) rather than discrete jumps. The step-change and BOCPD detectors remain useful, but this event is not evidence for them.
 
-3. **C-band can see this precursor.** At ~8 mm/day, a 12-day Sentinel-1 pair accumulates ~10 cm, which is near the practical unwrapping limit but within reach. The 40 cm cumulative signal over 48 days should be detectable with the existing Sentinel-1 + MintPy path. NISAR GOFF remains the fallback where motion outpaces phase unwrapping.
+3. **C-band should be able to see this precursor.** At ~8 mm/day, a 12-day Sentinel-1 pair accumulates ~10 cm, near the practical unwrapping limit but within reach. ICIMOD's 40 cm figure comes from Sentinel-1. GLEWS has not yet processed Sentinel-1 over the source (see below).
 
 4. **Steady fast flow is a false-positive trap.** A glacier moving ~29 m/yr without acceleration would swamp an absolute-velocity threshold. Per-pixel baselines (z-scores against each pixel's own history) and the Tier 1 cross-checks are what keep it from flagging every season.
 
+### Re-analysis over the source (NISAR GUNW, October 2026)
+
+The source was located from the latitude/longitude axes of ICIMOD Figure 9. The failed rock slope spans ~28.284–28.293°N, 85.519–85.530°E; its core is at **28.288°N, 85.524°E**, ~3.6 km north of the Langtang Lirung summit. Scripts are in [`scripts/nepal_2026/`](../scripts/nepal_2026/).
+
+**Data.** NISAR L2 GUNW, ascending track 98, frame 016: 21 sequential 12-day pairs (one 24-day pair at the end) from 28 Nov 2025 to 19 Aug 2026. The last pair, 26 Jul–19 Aug, is the same window ICIMOD cites for its ~30 cm NISAR figure. Excluded:
+
+- the 19 Aug–31 Aug pair, which spans the collapse;
+- duplicate product listings (one product per date pair);
+- descending track 48, which has no acquisitions from January to June and so no baseline.
+
+Each ~2.4 GB product was read with HTTP range requests, taking a 12 × 12 km crop of the 80 m unwrapped layers and a 6 × 6 km crop of the 20 m wrapped interferogram.
+
+**Method.** The standard GLEWS path: `load_nisar_gunw_stack` → acceleration map → `detect_anomalies`, with the detection parameters in `config/nepal_2026.yaml`, unchanged. One step was added that the loader lacks: each date is referenced to the median of a stable ring 2–5 km from the source.
+
+| Metric (coherence mask 0.3, the default) | Value |
+|-------|-------|
+| Source pixels passing the coherence mask | 33 of 171 |
+| Failed-slope pixels unwrapped as unreliable (connected component 0) in most pairs | 100% (crop-wide: 44%) |
+| Source median cumulative LOS, 28 Nov – 19 Aug | ≈ −5 cm (ICIMOD: ~30 cm in the final 24-day pair alone) |
+| Flags over the 144 km² crop | 53 |
+| Flag timing (peak window) | Mostly March (snow season) and July |
+| Flags on the failed slope | None. Nearest: rank 6, at 28.2838°N, 85.5319°E on the intact bedrock at the slope's SE edge, peak window 20 Jul, built entirely on unreliably unwrapped pixels |
+
+Sensitivity: lowering the mask to 0.2 gives 66 flags, and to 0.1 gives 78. At 0.1 a flag does sit on the source (0.2 km away), but it ranks 11th.
+
+**Findings.**
+
+1. **GLEWS's standard NISAR path would not have warned of this collapse.** The failed slope never unwraps reliably at 80 m posting, so its motion is underestimated by roughly an order of magnitude and buried among false positives elsewhere in the crop.
+2. **No confirmed signal in the 20 m wrapped phase.** A localized phase patch appears over the failed slope in the 14–26 Jul pair. Similar fringe rings around the massif appear in winter pairs too, consistent with terrain-correlated atmosphere or DEM error. Two ad-hoc unwrapping attempts (2-D least squares and a 1-D profile) gave summer values no different from winter. The feature is unconfirmed.
+3. **Loader gaps.**
+   - `nisar.py` ignores the `connectedComponents` layer, so unreliably unwrapped pixels feed the detectors.
+   - It does not reference displacement to stable ground.
+   - It applies the coherence mask to stack-mean coherence, which snow-season pairs drag down.
+4. **False-positive rate.** 53 flags in 144 km² of high-mountain terrain is far too many for analyst review. Tier 1 cross-checks and season-aware coherence handling are needed before alerts are meaningful.
+
 ### Next steps
 
-- Re-run with `config/nepal_2026.yaml`, now centred on the source (28.288°N, 85.524°E from ICIMOD Fig. 9, 20 km buffer), using both Sentinel-1 and NISAR.
-- Refine the source polygon from ICIMOD Figure 9 or Copernicus EMSR927 mapping.
-- Compare GLEWS displacement against the ICIMOD-reported 40 cm (Sentinel-1) and ~30 cm (NISAR) figures before claiming a lead time.
+- Unwrap the 20 m wrapped crops with SNAPHU (or process NISAR GSLCs directly) so the ~1 km source spans enough pixels.
+- Process Sentinel-1 over 7 Jul–24 Aug, e.g. with ASF HyP3, to test against ICIMOD's 40 cm figure.
+- Try NISAR GOFF offset tracking over the same pairs.
+- Fix the loader gaps above, then re-run.
 
 ### Limitations
 
@@ -232,12 +268,12 @@ The ensemble of four detectors (z-score, BOCPD, step-change, Voight) provides re
 
 | Event | Lead Time | Failure Mode | Rate |
 |-------|-----------|-------------|------|
-| Nepal 2026 (real, original study area)\* | 43 days | Unresolved | m/day |
+| Nepal 2026 (real, at source) | Not detected | Gradual (per ICIMOD) | ~8 mm/day |
 | Chamoli (synthetic) | ~30 days | Smooth acceleration | cm/day |
 | Aru-1 (synthetic) | 39 days | Surge | m/day |
 | Aru-2 (synthetic) | 54 days | Surge | m/day |
 
-Lead times of 30–54 days are consistent across the synthetic events (the Nepal figure is excluded until re-analysed over the source), suggesting the detection threshold (3 sigma default) is calibrated for approximately 1-month advance warning when the precursor signal exceeds the noise floor.
+Lead times of 30–54 days are consistent across the synthetic events (the one real event with a known precursor, Nepal 2026, was not detected), suggesting the detection threshold (3 sigma default) is calibrated for approximately 1-month advance warning when the precursor signal exceeds the noise floor.
 
 ### Satellite revisit vs. lead time
 
