@@ -95,19 +95,22 @@ sites:
   # ===================================================================
 
   - site:
-      name: "Nepal-Tibet Border 2026"
+      name: "Gyirong–Rasuwa 2026"
       event_date: "2026-08-26"
       description: >
-        Glacier-rock collapse near Tatopani, Nepal-Tibet border.
-        Confirmed retrospective case (>1,000 dead). Kept in the watch
-        list to validate continued post-event stability.
-      latitude: 28.20
-      longitude: 85.90
-      elevation_m: 4500
+        ~132 Mm3 rock-ice avalanche from the north face of Langtang
+        Lirung into the Lhende Khola, surging down the Gyirong–Rasuwagadhi
+        corridor (ICIMOD 2026, doi:10.53055/ICIMOD.1150). Nepal: 1,451
+        dead, 5,745 missing; China: 43 dead, 519 missing. Kept in the
+        watch list to validate continued post-event stability.
+      # Approximate source zone; see config/nepal_2026.yaml
+      latitude: 28.27
+      longitude: 85.51
+      elevation_m: 5200
       hazard_type: "rock-ice avalanche"
       priority: "CRITICAL"
-      notes: "Retrospective validation site; post-event stability monitoring"
-      buffer_km: 15
+      notes: "Retrospective validation site; post-event stability of the remaining north-face mass"
+      buffer_km: 20
     acquire:
       gunw_dir: "data/nisar/nepal_2026/gunw"
       goff_dir: "data/nisar/nepal_2026/goff"

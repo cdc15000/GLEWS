@@ -24,22 +24,41 @@ Retrospective and synthetic validation against four glacier/rock-slope collapse 
 
 | Event | Type | Lead Time | Key Metric | Data Source |
 |-------|------|-----------|------------|-------------|
-| **Nepal-Tibet Border 2026** | Real event (26 Aug 2026) | **43 days** | 5.06 m vertical subsidence, 295 GOFF anomaly flags | NISAR GOFF L-band |
+| **Gyirong–Rasuwa (Nepal–Tibet) 2026** | Real event (26 Aug 2026) | **43 days**\* | 5.06 m vertical subsidence, 295 GOFF anomaly flags\* | NISAR GOFF L-band |
 | **Weisshorn (Randa), Switzerland** | Real event | N/A | **81 mm** cumulative displacement detected | Sentinel-1 C-band |
 | **Chamoli, India (Feb 2021)** | Synthetic reconstruction | **~30 days** | Pre-collapse acceleration detected via z-score | Synthetic (modeled on real event parameters) |
 | **Aru Glaciers, Tibet (Jul 2016)** | Synthetic reconstruction | **39-54 days** | Dual-glacier collapse precursor signals | Synthetic (modeled on real event parameters) |
 
+\* Measured over the original study area (28.1°N, 85.9°E), not over the collapse source identified by ICIMOD (see below). Re-analysis over the source is pending.
+
 Details in [docs/validation.md](docs/validation.md).
 
-### Nepal 2026 case study (primary validation)
+### Gyirong–Rasuwa 2026 case study (primary validation)
 
-Retrospective analysis of the August 26, 2026 Nepal-Tibet border glacier-rock collapse against archived NISAR data:
+**What happened.** ICIMOD's preliminary synthesis, published 13 October 2026, gives the following account:
 
-- **43 days of advance notice** - the sigma-threshold acceleration-anomaly detector flagged the site well ahead of the collapse, even though Voight's inverse-velocity law failed to converge (the failure was a two-phase step-change, not smooth pre-failure acceleration).
-- **5.06 m of vertical subsidence** measured in the lead-up to collapse, decomposed from line-of-sight displacement using the site's local incidence geometry.
-- **295 anomaly flags** from NISAR GOFF (amplitude offset-tracking) detection, which stayed coherent through the meter-scale displacement that saturated phase-based (GUNW) InSAR.
+- At 08:37 NPT on 26 August 2026, about 132 million m³ of rock and glacier ice (roughly 115 Mm³ rock and 17 Mm³ ice) detached from the north face of Langtang Lirung at about 5,200 masl.
+- It fell about 1,200 m into the Lhende Khola. The debris surge reached the Gyirong–Rasuwagadhi border corridor in about 7 minutes.
+- SMS alerts went out at 09:15, after the corridor had already been struck.
+- In Nepal, 1,451 people were killed and 5,745 remain missing. In China, 43 were killed and 519 are missing.
+- The event was a bedrock failure that sheared away part of a hanging glacier. It was not a glacial lake outburst flood, and no heavy rainfall or rise in river levels preceded it, so rainfall- and river-based warning systems could not have detected it.
+- Pre-event satellite radar showed the slope moving gradually:
+  - **Sentinel-1:** up to **40 cm** of line-of-sight displacement between 7 July and 24 August (48 days).
+  - **NISAR:** up to about **30 cm** between 26 July and 19 August.
 
-These results motivated the NISAR loaders (`nisar.py`) and the operational monitoring loop (`monitor.py`): GUNW phase unwrapping is limited to about half a wavelength (~12 cm/cycle for L-band) per interval, so large, fast-moving pre-collapse displacement is only observable via GOFF offset tracking. The Nepal event's two-phase failure mode also motivated the BOCPD and step-change detectors in `timeseries.py`.
+**What GLEWS found.** An earlier retrospective run against archived NISAR data was centred on 28.1°N, 85.9°E, based on initial reporting. That is about 38 km east of the source:
+
+- **43 days of advance notice.** The sigma-threshold acceleration detector flagged anomalies well before the event date. Voight's inverse-velocity law did not converge.
+- **5.06 m of vertical subsidence**, decomposed from line-of-sight displacement.
+- **295 anomaly flags** from NISAR GOFF offset tracking.
+
+Because these figures come from a different area, they do not show that GLEWS detected the Langtang Lirung precursor. `config/nepal_2026.yaml` now targets the source zone. The next validation step is re-running Sentinel-1 and NISAR analysis there over 7 July – 24 August 2026.
+
+**Design implications:**
+
+- A precursor of about 8 mm/day (roughly 10 cm per 12-day Sentinel-1 pair) is at the limit of C-band phase unwrapping. This is why GLEWS includes NISAR L-band and GOFF offset tracking (`nisar.py`).
+- The source glacier moved about 29 m/yr from 2014 to 2024 without accelerating. ICIMOD reads the pre-failure signal as bedrock failure, with the ice playing a passive role. Scoring each pixel against its own baseline, rather than flagging absolute velocity, is what keeps a fast glacier from swamping the detector.
+- ICIMOD lists atmospheric or geometric artefacts among the possible explanations for the pre-event signal. That argues for running the Tier 1 cross-check filters on real data.
 
 ---
 
@@ -89,7 +108,7 @@ Each cycle searches ASF DAAC for new GUNW/GOFF products, downloads anything not 
 glews dashboard -c config/nepal_2026.yaml --data-dir output --port 8080
 ```
 
-Open `http://localhost:8080` to see flagged sites with severity levels, time-series plots, and cascade risk summaries. Analysts can classify flags as Watch / Warning / Cleared.
+Open `http://localhost:8080` to see flagged sites with severity levels, time-series plots, and cascade risk summaries. Analysts can classify flags as Watch / Warning / Cleared. When the flags come from `glews demo`, a **SYNTHETIC DATA** banner is shown so demo results aren't mistaken for observations.
 
 ### Docker (fastest path)
 
@@ -342,6 +361,23 @@ Secrets use `${ENV_VAR}` expansion so credentials stay out of config files.
 
 Tier 2 review interface - a single-page web dashboard using Python's built-in `http.server`. Analysts review flagged sites by severity, inspect time-series plots, and classify flags as Watch / Warning / Cleared.
 
+- **Severity levels:** `CRITICAL`, `POST-EVENT`, `WARNING` and `INFO`. A `CRITICAL` flag whose Voight-predicted failure date falls before the site's `event_date` is shown as `POST-EVENT`. This separates failures that have already happened from ones that may still be coming.
+- **Map:** a Leaflet map of all flags, with a pulsing marker on the flag being reviewed.
+- **Context panels:**
+  - Voight failure forecast
+  - Elevation and slope
+  - Sentinel-2 scenes
+  - Current weather
+  - Downstream exposure
+  - Flag history
+  - Monitoring cadence
+  - In-situ instruments
+  - Field reconnaissance
+  - A news feed that mixes academic and media sources
+- **Response protocol:** inside the Analyst Classification panel, for flags with a Voight fit. It drafts an authority notification or an evacuation advisory, with Copy and Close controls.
+- **Synthetic-data banner:** shown when `flags.geojson` is tagged `data_source: synthetic`.
+- **Themes:** light, dark, and system.
+
 ---
 
 ## Global Watchlist
@@ -433,7 +469,7 @@ Bayesian Online Changepoint Detection (Adams & MacKay 2007) with a Student-t obs
 
 ### Step-change detection
 
-Detects sudden displacement jumps - the failure mode observed in the Nepal 2026 event, where collapse was preceded by two discrete acceleration steps rather than smooth pre-failure creep.
+Detects sudden displacement jumps between consecutive acquisitions. These are the kind of discrete steps that a smooth acceleration trend, and Voight's law, both miss. The earlier Nepal 2026 run over the original study area showed this pattern. ICIMOD's account of the source zone instead describes gradual movement, up to 40 cm over 48 days.
 
 ### Voight's failure law
 
@@ -456,5 +492,6 @@ MIT (see `pyproject.toml`).
 - Wang, W. et al. "Early warning system for glacial lake outburst floods in Cirenmaco, Tibet." *Int. J. Disaster Risk Reduct.* 73, 102914 (2022).
 - Voight, B. "A method for prediction of volcanic eruptions." *Nature* 332, 125-130 (1988).
 - Shirzaei, M. "Satellite images before Nepal disaster showed warning signs." *Nature* News Q&A, 2 September 2026.
+- ICIMOD. *Understanding the Gyirong–Rasuwa disaster of 26 August 2026: A preliminary synthesis.* International Centre for Integrated Mountain Development (2026). https://doi.org/10.53055/ICIMOD.1150
 - Rosen, P.A. et al. "An InSAR time series approach." *J. Geophys. Res.* (2004). [ISCE-2 framework]
 - Yunjun, Z. et al. "Small baseline InSAR time series analysis." *Comput. Geosci.* (2019). [MintPy]
