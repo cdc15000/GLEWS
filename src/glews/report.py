@@ -116,6 +116,7 @@ def generate_report(
     geojson_path = _export_geojson(
         flags, assessments, output_dir,
         data_source=config.get("site", {}).get("data_source"),
+        provenance=config.get("site", {}).get("provenance"),
     )
 
     # 5. Summary text report
@@ -244,6 +245,7 @@ def _export_geojson(
     assessments: list[CascadeAssessment] | None,
     output_dir: Path,
     data_source: str | None = None,
+    provenance: dict | None = None,
 ) -> Path:
     """Export flags as GeoJSON for viewing in QGIS, Google Earth, etc."""
     assessment_map = {}
@@ -261,6 +263,11 @@ def _export_geojson(
             "area_m2": round(flag.area_m2, 0),
             "acceleration_mm_yr2": round(flag.acceleration_m_yr2 * 1000, 2),
         }
+        if flag.window_date:
+            props["peak_window_date"] = _ordinal_to_str(flag.window_date)
+        for key in ("quality", "ifg_strip"):
+            if key in flag.detection_details:
+                props[key] = flag.detection_details[key]
 
         if flag.voight_fit:
             vf = flag.voight_fit
@@ -306,6 +313,8 @@ def _export_geojson(
     }
     if data_source:
         geojson["properties"]["data_source"] = data_source
+    if provenance:
+        geojson["properties"]["provenance"] = provenance
 
     path = output_dir / "flags.geojson"
     path.write_text(json.dumps(geojson, indent=2, default=_json_default))

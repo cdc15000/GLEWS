@@ -366,7 +366,12 @@ Secrets use `${ENV_VAR}` expansion so credentials stay out of config files.
 Tier 2 review interface - a single-page web dashboard using Python's built-in `http.server`. Analysts review flagged sites by severity, inspect time-series plots, and classify flags as Watch / Warning / Cleared.
 
 - **Severity levels:** `CRITICAL`, `POST-EVENT`, `WARNING` and `INFO`. A `CRITICAL` flag whose Voight-predicted failure date falls before the site's `event_date` is shown as `POST-EVENT`. This separates failures that have already happened from ones that may still be coming.
-- **Map:** a Leaflet map of all flags, with a pulsing marker on the flag being reviewed.
+- **Data reliability:** when a run records per-flag quality (`glews.quality.assess_flag_quality`), each flag gets a Good / Marginal / Unreliable badge from its mean coherence, the share of pixel-pairs unwrapped unreliably, and how many pairs are usable. An unreliable flag is capped at `WARNING`, and the detail view says when the score alone would have made it `CRITICAL`.
+- **Provenance banner:** real-data runs that record `provenance` in `flags.geojson` show an OBSERVED DATA banner with the sensor, product, track, date range, pair count, coherence mask, referencing and any excluded pairs.
+- **Map:** a Leaflet map of all flags, with a pulsing marker on the flag being reviewed. If the site config has a `known_source` polygon it is drawn on the map, and each flag shows its distance from it. The analysed area is outlined when the run records its extent.
+- **Triage:** sort by score, distance to the known source or peak date; filter by data reliability; and filter by peak month using a histogram with the site's `snow_months` shaded. The flags currently shown can be cleared together with a reason, and every classification, single or bulk, is written to `<data-dir>/audit/alert_audit.jsonl`.
+- **Time series:** plotted on a true time axis so acquisition gaps show as dashed segments, with the snow season shaded, the event date marked, and per-pair coherence beneath (orange where a pair is unusable).
+- **Interferograms:** when a run renders them (`glews.quality.render_interferogram_strips`), a strip of wrapped-phase tiles around the flag, one per pair, is shown for telling real motion from atmospheric or topographic phase.
 - **Context panels:**
   - Voight failure forecast
   - Elevation and slope
@@ -379,7 +384,8 @@ Tier 2 review interface - a single-page web dashboard using Python's built-in `h
   - Field reconnaissance
   - A news feed that mixes academic and media sources
 - **Response protocol:** inside the Analyst Classification panel, for flags with a Voight fit. It drafts an authority notification or an evacuation advisory, with Copy and Close controls.
-- **Synthetic-data banner:** shown when `flags.geojson` is tagged `data_source: synthetic`.
+- **Synthetic-data banner:** shown when `flags.geojson` is tagged `data_source: synthetic`. The known source is not drawn for synthetic data.
+- **Fast start:** place names are looked up from OpenStreetMap in the background and cached in `place_names.json`, so the page is served immediately and fills them in when they arrive.
 - **Themes:** light, dark, and system.
 
 ---
@@ -390,7 +396,7 @@ The built-in watchlist (`config/global_watch.yaml`) monitors 13 sites:
 
 | Region | Sites |
 |--------|-------|
-| High Mountain Asia | Nepal-Tibet Border 2026, Chamoli (Uttarakhand), Sedongpu Glacier (SE Tibet), Karakoram (Baltoro/Siachen), Aru Glaciers (W. Tibet), Kyagar Glacier (Karakoram) |
+| High Mountain Asia | Gyirong–Rasuwa 2026 (Langtang Lirung), Chamoli (Uttarakhand), Sedongpu Glacier (SE Tibet), Karakoram (Baltoro/Siachen), Aru Glaciers (W. Tibet), Kyagar Glacier (Karakoram) |
 | European Alps | Grandes Jorasses (Mont Blanc), Aletsch Glacier (Valais) |
 | Polar ice sheets | Sermeq Kujalleq (Jakobshavn, Greenland), Thwaites Glacier (W. Antarctica) |
 | Americas | Mount Meager (British Columbia), Huascaran (Cordillera Blanca, Peru) |

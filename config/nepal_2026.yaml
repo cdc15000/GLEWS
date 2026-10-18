@@ -28,6 +28,32 @@ site:
   # north to ~28.296N. ~3.6 km N of the Langtang Lirung summit.
   latitude: 28.288
   longitude: 85.524
+  # Known failure source, drawn on the dashboard map. Outline of the failed
+  # glacier + failed rock slope, digitised approximately by eye from ICIMOD
+  # (2026) Figure 9 — good to ~50 m. [lat, lon] vertices.
+  known_source:
+    label: "Failed slope (ICIMOD 2026, Fig. 9)"
+    polygon:
+      - [28.2840, 85.5195]
+      - [28.2843, 85.5215]
+      - [28.2820, 85.5236]
+      - [28.2830, 85.5248]
+      - [28.2852, 85.5270]
+      - [28.2882, 85.5300]
+      - [28.2915, 85.5320]
+      - [28.2937, 85.5308]
+      - [28.2956, 85.5285]
+      - [28.2960, 85.5258]
+      - [28.2948, 85.5233]
+      - [28.2930, 85.5210]
+      - [28.2912, 85.5207]
+      - [28.2895, 85.5218]
+      - [28.2878, 85.5207]
+      - [28.2858, 85.5199]
+  # Months when snow decorrelates high-elevation InSAR here (coherence over
+  # the source fell to 0.1-0.2 in Mar-May 2026 NISAR pairs). Shaded on the
+  # dashboard time-series and peak-date histogram.
+  snow_months: [12, 1, 2, 3, 4, 5]
   # 20 km reaches Rasuwagadhi (~13 km W) so exposure covers the struck corridor
   buffer_km: 20
 

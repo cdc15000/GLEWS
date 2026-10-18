@@ -22,6 +22,7 @@ import time
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
+from html import escape as html_escape
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -38,6 +39,10 @@ SEVERITY_WARNING_THRESHOLD = 2.5
 # Analyst classification choices (distinct from severity)
 VALID_CLASSIFICATIONS = {"Watch", "Warning", "Cleared"}
 
+# Flags graded "unreliable" by glews.quality (low coherence or unreliable
+# unwrapping under most of their pixels) cannot display above this severity.
+UNRELIABLE_SEVERITY_CAP = "WARNING"
+
 _USER_AGENT = "GLEWS/0.1 (glacier-landslide-warning; https://github.com/glews)"
 _API_TIMEOUT = 10
 
@@ -49,6 +54,15 @@ def _severity_from_score(score: float) -> str:
     if score >= SEVERITY_WARNING_THRESHOLD:
         return "WARNING"
     return "INFO"
+
+
+def _cap_unreliable_severity(flags: list[dict]) -> None:
+    """Stop flags built on unreliable data from displaying as CRITICAL."""
+    for f in flags:
+        quality = f.get("quality") or {}
+        if quality.get("reliability") == "unreliable" and f.get("severity") == "CRITICAL":
+            f["severity_uncapped"] = "CRITICAL"
+            f["severity"] = UNRELIABLE_SEVERITY_CAP
 
 
 def _reclassify_post_events(flags: list[dict], event_date: str | None) -> None:
@@ -159,6 +173,8 @@ def load_flags(data_dir: str | Path) -> list[dict]:
                 f["severity"] = risk.upper()
             else:
                 f["severity"] = _severity_from_score(f.get("score", 0))
+
+    _cap_unreliable_severity(flags)
 
     # Sanitize non-finite floats (NaN from step-change detector)
     flags = [_sanitize_for_json(f) for f in flags]
@@ -1061,6 +1077,12 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     --chart-grid: #dfe6e9;
     --chart-axis: #636e72;
     --chart-label: #2d3436;
+    --chart-snow: rgba(116,185,255,0.14);
+    --chart-coh: #a4b0be;
+    --chart-coh-bad: #e17055;
+    --info-bg: #e8f1fb;
+    --info-fg: #1d4f7a;
+    --info-border: #bcd6ee;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -1085,6 +1107,12 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     --chart-grid: #2a2a4a;
     --chart-axis: #a0a0b0;
     --chart-label: #e0e0e0;
+    --chart-snow: rgba(116,185,255,0.10);
+    --chart-coh: #5a6380;
+    --chart-coh-bad: #e17055;
+    --info-bg: #0f2a44;
+    --info-fg: #a9d1f5;
+    --info-border: #1f4a73;
   }
 }
 :root[data-theme="dark"] {
@@ -1109,6 +1137,12 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     --chart-grid: #2a2a4a;
     --chart-axis: #a0a0b0;
     --chart-label: #e0e0e0;
+    --chart-snow: rgba(116,185,255,0.10);
+    --chart-coh: #5a6380;
+    --chart-coh-bad: #e17055;
+    --info-bg: #0f2a44;
+    --info-fg: #a9d1f5;
+    --info-border: #1f4a73;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1159,6 +1193,41 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .main-header h2 { font-size: 20px; color: var(--text-primary); }
 .data-banner { padding: 8px 30px; background: var(--banner-bg); color: var(--banner-fg); border-bottom: 1px solid var(--banner-border); font-size: 13px; line-height: 1.4; }
 .data-banner strong { letter-spacing: 0.06em; margin-right: 6px; }
+.data-banner-observed { background: var(--info-bg); color: var(--info-fg); border-bottom-color: var(--info-border); }
+.data-banner .banner-detail { opacity: 0.85; }
+
+/* Data reliability */
+.rel-badge { display: inline-block; padding: 2px 7px; border-radius: 3px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.3px; color: #fff; margin-left: 6px; white-space: nowrap; }
+.rel-good { background: #0b7a5a; }
+.rel-marginal { background: #9a6b12; }
+.rel-unreliable { background: #57606f; }
+.quality-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 16px; padding: 12px 14px; background: var(--bg-inset); border-radius: 6px; font-size: 13px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.quality-row .rel-badge { margin-left: 0; }
+.quality-row strong { color: var(--text-primary); font-weight: 600; }
+.cap-note { flex-basis: 100%; color: var(--text-primary); }
+
+/* Sidebar triage tools (sidebar is dark in both themes) */
+.sidebar-tools { padding: 10px 20px 12px; border-bottom: 1px solid var(--sidebar-border); display: flex; flex-direction: column; gap: 10px; }
+.tool-row { display: flex; gap: 10px; }
+.tool-row label { flex: 1; display: flex; flex-direction: column; gap: 3px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #a0a0b0; }
+.tool-row select { padding: 4px 6px; border: 1px solid #485460; border-radius: 4px; background: #2d3e50; color: #dfe6e9; font-size: 12px; text-transform: none; letter-spacing: 0; }
+.tool-row select:focus-visible, .bulk-form select:focus-visible, .bulk-form input:focus-visible, .sidebar-tools button:focus-visible { outline: 2px solid #74b9ff; outline-offset: 1px; }
+.hist-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #a0a0b0; display: flex; justify-content: space-between; }
+.hist-title button { background: none; border: none; color: #74b9ff; font-size: 11px; cursor: pointer; padding: 0; text-transform: none; letter-spacing: 0; }
+.peak-hist svg { display: block; width: 100%; height: auto; }
+.peak-hist rect.bar { cursor: pointer; }
+.bulk-btn { padding: 5px 10px; border: 1px solid #485460; border-radius: 4px; background: transparent; color: #dfe6e9; font-size: 12px; cursor: pointer; align-self: flex-start; }
+.bulk-btn:hover { border-color: #74b9ff; }
+.bulk-form { display: flex; flex-direction: column; gap: 6px; padding: 10px; background: #2d3e50; border-radius: 6px; font-size: 12px; color: #dfe6e9; }
+.bulk-form select, .bulk-form input { padding: 5px 6px; border: 1px solid #485460; border-radius: 4px; background: #1e272e; color: #dfe6e9; font-size: 12px; }
+.bulk-form .bulk-actions { display: flex; gap: 6px; }
+.bulk-form .bulk-actions button { padding: 5px 10px; border-radius: 4px; font-size: 12px; cursor: pointer; border: 1px solid #485460; background: transparent; color: #dfe6e9; }
+.bulk-form .bulk-actions button.confirm { background: #00b894; border-color: #00b894; color: #fff; font-weight: 600; }
+.bulk-form .bulk-error { color: #ff7675; }
+
+/* Interferogram strip */
+.ifg-strip { width: 100%; height: auto; display: block; border-radius: 4px; background: #fff; }
+.ifg-caption { font-size: 12px; color: var(--text-secondary); margin-top: 8px; line-height: 1.5; }
 .main-body { flex: 1; overflow-y: auto; padding: 30px; }
 
 /* Detail card */
@@ -1294,6 +1363,27 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
         <button onclick="filterFlags('WARNING')">Warning</button>
         <button onclick="filterFlags('INFO')">Info</button>
     </div>
+    <div class="sidebar-tools">
+        <div class="tool-row">
+            <label>Sort
+                <select id="sortSelect" onchange="setSort(this.value)">
+                    <option value="score">Anomaly score</option>
+                    <option value="distance" id="sortDistanceOpt">Distance to source</option>
+                    <option value="date">Peak date</option>
+                </select>
+            </label>
+            <label id="relFilterLabel">Data quality
+                <select id="relSelect" onchange="setReliability(this.value)">
+                    <option value="ALL">All</option>
+                    <option value="good">Good</option>
+                    <option value="marginal">Marginal</option>
+                    <option value="unreliable">Unreliable</option>
+                </select>
+            </label>
+        </div>
+        <div class="peak-hist" id="peakHist"></div>
+        <div id="bulkArea"></div>
+    </div>
     <div class="flag-list" id="flagList"></div>
 </div>
 <div class="main">
@@ -1312,24 +1402,103 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script>
 var FLAGS = $$FLAGS_JSON$$;
 var STATE = $$STATE_JSON$$;
+var SITE = $$SITE_JSON$$;
 var currentFilter = 'ALL';
+var currentSort = 'score';
+var currentReliability = 'ALL';
+var currentMonth = null;
 var selectedFlagId = null;
 var cachedExposure = null;
+var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+// ---- Known source + reliability helpers ----
+function _kmXY(lat, lon, lat0) {
+    return [lon * 111.32 * Math.cos(lat0 * Math.PI / 180), lat * 110.57];
+}
+// Distance (km) from a point to the known-source polygon; 0 inside, null if no source configured.
+function distanceToSource(lat, lon) {
+    var ks = SITE.known_source;
+    if (!ks || !ks.polygon || ks.polygon.length < 3 || lat == null || lon == null) return null;
+    var poly = ks.polygon, lat0 = poly[0][0], p = _kmXY(lat, lon, lat0);
+    var inside = false, best = Infinity;
+    for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        var a = _kmXY(poly[i][0], poly[i][1], lat0), b = _kmXY(poly[j][0], poly[j][1], lat0);
+        if (((a[1] > p[1]) !== (b[1] > p[1])) && (p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0])) inside = !inside;
+        var dx = b[0] - a[0], dy = b[1] - a[1];
+        var t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1);
+        t = Math.max(0, Math.min(1, t));
+        var ex = a[0] + t * dx - p[0], ey = a[1] + t * dy - p[1];
+        best = Math.min(best, Math.sqrt(ex * ex + ey * ey));
+    }
+    return inside ? 0 : best;
+}
+function formatDistance(d) {
+    if (d == null) return '';
+    if (d === 0) return 'on known source';
+    return (d < 10 ? d.toFixed(1) : Math.round(d)) + ' km from source';
+}
+function reliabilityOf(f) { return (f.quality && f.quality.reliability) || null; }
+function qualitySummary(q) {
+    var parts = [];
+    if (q.mean_coherence != null) parts.push('mean coherence ' + q.mean_coherence.toFixed(2));
+    if (q.unreliable_fraction != null) parts.push(Math.round(q.unreliable_fraction * 100) + '% unreliably unwrapped');
+    if (q.n_pairs) parts.push(q.n_pairs_usable + ' of ' + q.n_pairs + ' pairs usable');
+    return parts.join(' · ');
+}
+function reliabilityBadge(f) {
+    var r = reliabilityOf(f);
+    if (!r) return '';
+    var label = {good: 'Good data', marginal: 'Marginal data', unreliable: 'Unreliable data'}[r] || r;
+    return '<span class="rel-badge rel-' + r + '" title="' + escapeHtml(qualitySummary(f.quality)) + '">' + label + '</span>';
+}
+function peakMonth(f) { return f.peak_window_date ? f.peak_window_date.slice(0, 7) : null; }
+function monthLabel(ym) { return MONTHS[parseInt(ym.slice(5, 7), 10) - 1] + ' ' + ym.slice(0, 4); }
+
+for (var _i = 0; _i < FLAGS.length; _i++) {
+    FLAGS[_i]._dist = distanceToSource(FLAGS[_i].center_lat, FLAGS[_i].center_lon);
+}
+
+// ---- Filtering + sorting ----
 function filterFlags(severity) {
     currentFilter = severity;
     document.querySelectorAll('.sidebar-filter button').forEach(function(btn) {
         btn.classList.toggle('active', btn.textContent.toLowerCase() === severity.toLowerCase() || (severity === 'ALL' && btn.textContent === 'All'));
     });
+    refreshSidebar();
+}
+function setSort(v) { currentSort = v; refreshSidebar(); }
+function setReliability(v) { currentReliability = v; refreshSidebar(); }
+function setMonth(ym) { currentMonth = (currentMonth === ym) ? null : ym; refreshSidebar(); }
+
+// Flags passing severity + reliability filters (the histogram's population)
+function baseFiltered() {
+    return FLAGS.filter(function(f) {
+        if (currentFilter !== 'ALL' && f.severity !== currentFilter) return false;
+        if (currentReliability !== 'ALL' && reliabilityOf(f) !== currentReliability) return false;
+        return true;
+    });
+}
+function visibleFlags() {
+    var list = baseFiltered().filter(function(f) { return !currentMonth || peakMonth(f) === currentMonth; });
+    var cmp = {
+        score: function(a, b) { return (b.score || 0) - (a.score || 0); },
+        distance: function(a, b) {
+            var da = a._dist == null ? Infinity : a._dist, db = b._dist == null ? Infinity : b._dist;
+            return da - db || (b.score || 0) - (a.score || 0);
+        },
+        date: function(a, b) { return String(a.peak_window_date || '9999').localeCompare(String(b.peak_window_date || '9999')); }
+    }[currentSort];
+    return list.slice().sort(cmp);
+}
+function refreshSidebar() {
+    renderPeakHistogram();
     renderFlagList();
+    renderBulkArea();
 }
 
 function renderFlagList() {
     var list = document.getElementById('flagList');
-    var filtered = FLAGS;
-    if (currentFilter !== 'ALL') {
-        filtered = FLAGS.filter(function(f) { return f.severity === currentFilter; });
-    }
+    var filtered = visibleFlags();
     var html = '';
     for (var i = 0; i < filtered.length; i++) {
         var f = filtered[i];
@@ -1352,13 +1521,116 @@ function renderFlagList() {
         html += '<div class="flag-meta">Score: ' + (f.score != null ? f.score.toFixed(2) : 'N/A');
         html += ' &middot; Z: ' + (f.peak_zscore != null ? f.peak_zscore.toFixed(1) : 'N/A');
         html += ' &middot; ' + formatArea(f.area_m2) + '</div>';
-        html += '<div class="flag-meta">' + formatCoord(f.center_lat, f.center_lon) + '</div>';
+        var extra = [];
+        if (f.peak_window_date) extra.push('peak ' + f.peak_window_date);
+        if (f._dist != null) extra.push(formatDistance(f._dist));
+        html += '<div class="flag-meta">' + formatCoord(f.center_lat, f.center_lon) + reliabilityBadge(f) + '</div>';
+        if (extra.length) html += '<div class="flag-meta">' + extra.join(' &middot; ') + '</div>';
         html += '</div>';
     }
     if (filtered.length === 0) {
-        html = '<div style="padding:30px 20px;color:var(--text-secondary);text-align:center;">No flags match this filter</div>';
+        html = '<div style="padding:30px 20px;color:var(--text-secondary);text-align:center;">No flags match these filters</div>';
     }
     list.innerHTML = html;
+}
+
+// ---- Peak-window histogram (by month) ----
+function renderPeakHistogram() {
+    var el = document.getElementById('peakHist');
+    var pop = baseFiltered();
+    var counts = {}, months = [];
+    for (var i = 0; i < FLAGS.length; i++) { var m = peakMonth(FLAGS[i]); if (m && months.indexOf(m) < 0) months.push(m); }
+    if (months.length === 0) { el.innerHTML = ''; return; }
+    months.sort();
+    // fill gaps so the axis is continuous
+    var all = [], y = +months[0].slice(0, 4), mo = +months[0].slice(5, 7), last = months[months.length - 1];
+    while (true) {
+        var ym = y + '-' + (mo < 10 ? '0' : '') + mo;
+        all.push(ym);
+        if (ym >= last || all.length > 36) break;
+        mo++; if (mo > 12) { mo = 1; y++; }
+    }
+    for (var k = 0; k < pop.length; k++) { var pm = peakMonth(pop[k]); if (pm) counts[pm] = (counts[pm] || 0) + 1; }
+    var maxC = 1; all.forEach(function(m) { maxC = Math.max(maxC, counts[m] || 0); });
+    var W = 300, H = 74, top = 12, base = 58, bw = W / all.length;
+    var snow = SITE.snow_months || [];
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Flags by peak month">';
+    all.forEach(function(m, i) {
+        var x = i * bw, c = counts[m] || 0, h = (base - top) * c / maxC;
+        if (snow.indexOf(+m.slice(5, 7)) >= 0) svg += '<rect x="' + x + '" y="0" width="' + bw + '" height="' + base + '" fill="rgba(116,185,255,0.10)"/>';
+        var on = currentMonth === m;
+        var fill = currentMonth && !on ? 'rgba(116,185,255,0.35)' : (on ? '#ffffff' : '#74b9ff');
+        svg += '<rect class="bar" x="' + (x + bw * 0.18) + '" y="' + (base - h) + '" width="' + (bw * 0.64) + '" height="' + Math.max(h, c ? 1 : 0) + '" fill="' + fill + '" onclick="setMonth(\'' + m + '\')"><title>' + monthLabel(m) + ': ' + c + ' flag' + (c === 1 ? '' : 's') + '</title></rect>';
+        svg += '<rect x="' + x + '" y="0" width="' + bw + '" height="' + H + '" fill="transparent" style="cursor:pointer" onclick="setMonth(\'' + m + '\')"><title>' + monthLabel(m) + ': ' + c + '</title></rect>';
+        if (c) svg += '<text x="' + (x + bw / 2) + '" y="' + (base - h - 3) + '" text-anchor="middle" font-size="8.5" fill="#dfe6e9">' + c + '</text>';
+        svg += '<text x="' + (x + bw / 2) + '" y="' + (H - 4) + '" text-anchor="middle" font-size="8.5" fill="' + (on ? '#ffffff' : '#a0a0b0') + '">' + MONTHS[+m.slice(5, 7) - 1].charAt(0) + '</text>';
+    });
+    svg += '</svg>';
+    var title = '<div class="hist-title"><span>Flags by peak month' + (snow.length ? ' · shaded = snow season' : '') + '</span>';
+    if (currentMonth) title += '<button onclick="setMonth(null)">Clear ' + monthLabel(currentMonth) + '</button>';
+    title += '</div>';
+    el.innerHTML = title + svg;
+}
+
+// ---- Bulk classification ----
+var BULK_REASONS = ['Seasonal decorrelation (snow)', 'Unwrapping artefact', 'Atmospheric or topographic phase', 'Outside area of interest'];
+var bulkOpen = false;
+function renderBulkArea(errorMsg) {
+    var el = document.getElementById('bulkArea');
+    var n = visibleFlags().length;
+    if (n === 0) { el.innerHTML = ''; bulkOpen = false; return; }
+    if (!bulkOpen) {
+        el.innerHTML = '<button class="bulk-btn" onclick="openBulk()">Clear the ' + n + ' flag' + (n === 1 ? '' : 's') + ' shown…</button>';
+        return;
+    }
+    var html = '<div class="bulk-form"><div>Mark the <strong>' + n + '</strong> flag' + (n === 1 ? '' : 's') + ' shown as Cleared. Each is recorded in the audit log with this reason.</div>';
+    html += '<select id="bulkReason" aria-label="Reason">';
+    for (var i = 0; i < BULK_REASONS.length; i++) html += '<option>' + BULK_REASONS[i] + '</option>';
+    html += '</select><input id="bulkDetail" type="text" placeholder="Add detail (optional)" aria-label="Detail">';
+    if (errorMsg) html += '<div class="bulk-error">' + escapeHtml(errorMsg) + '</div>';
+    html += '<div class="bulk-actions"><button class="confirm" onclick="submitBulk()">Clear ' + n + '</button><button onclick="closeBulk()">Cancel</button></div></div>';
+    el.innerHTML = html;
+}
+function openBulk() { bulkOpen = true; renderBulkArea(); }
+function closeBulk() { bulkOpen = false; renderBulkArea(); }
+function submitBulk() {
+    var ids = visibleFlags().map(function(f) { return f.flag_id; });
+    var reason = document.getElementById('bulkReason').value;
+    var detail = document.getElementById('bulkDetail').value.trim();
+    if (detail) reason += ' — ' + detail;
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/classify_bulk', true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.onload = function() {
+        var resp = {};
+        try { resp = JSON.parse(xhr.responseText); } catch (e) {}
+        if (xhr.status !== 200) { renderBulkArea(resp.error || ('Request failed (' + xhr.status + ')')); return; }
+        for (var fid in resp.updated) STATE[fid] = resp.updated[fid];
+        bulkOpen = false;
+        refreshSidebar();
+        if (selectedFlagId != null && resp.updated[String(selectedFlagId)]) renderDetail(selectedFlagId);
+    };
+    xhr.onerror = function() { renderBulkArea('Network error — nothing was changed'); };
+    xhr.send(JSON.stringify({flag_ids: ids, classification: 'Cleared', note: reason}));
+}
+
+// ---- Place names arrive in the background ----
+function pollPlaceNames() {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/api/place_names', true);
+    xhr.onload = function() {
+        if (xhr.status !== 200) return;
+        var resp = JSON.parse(xhr.responseText), changed = false;
+        for (var i = 0; i < FLAGS.length; i++) {
+            var n = resp.names[String(FLAGS[i].flag_id)];
+            if (n && n.name !== FLAGS[i].place_name) {
+                FLAGS[i].place_name = n.name; FLAGS[i].place_name_en = n.name_en; changed = true;
+            }
+        }
+        if (changed) renderFlagList();
+        if (resp.pending) setTimeout(pollPlaceNames, 3000);
+    };
+    xhr.send();
 }
 
 function renderStats() {
@@ -1436,18 +1708,39 @@ function renderDetail(flagId) {
     html += metric('Area', formatArea(f.area_m2), '');
     html += metric('Pixels', f.n_pixels != null ? f.n_pixels.toLocaleString() : 'N/A', '');
     html += metric('Acceleration', accelStr, '');
+    if (f.peak_window_date) html += metric('Peak window', f.peak_window_date, '');
+    if (f._dist != null) html += metric('Distance to source', f._dist === 0 ? 'On source' : f._dist.toFixed(2), f._dist === 0 ? '' : ' km');
     html += '</div>';
 
+    if (f.quality) {
+        var q = f.quality;
+        html += '<div class="quality-row">' + reliabilityBadge(f);
+        html += '<span>Mean coherence <strong>' + (q.mean_coherence != null ? q.mean_coherence.toFixed(2) : 'N/A') + '</strong></span>';
+        html += '<span><strong>' + Math.round((q.unreliable_fraction || 0) * 100) + '%</strong> of pixel-pairs unreliably unwrapped</span>';
+        html += '<span><strong>' + q.n_pairs_usable + ' of ' + q.n_pairs + '</strong> pairs usable</span>';
+        if (f.severity_uncapped) {
+            html += '<span class="cap-note">The anomaly score alone would make this ' + f.severity_uncapped + '. It is shown as ' + f.severity + ' because the data under it is unreliable.</span>';
+        }
+        html += '</div>';
+    }
+
     // Chart area
-    html += '<div class="chart-container">';
+    html += '<div class="chart-container" id="tsChart">';
     if (f.timeseries && f.timeseries.dates && f.timeseries.values) {
-        html += renderTimeseriesSVG(f.timeseries.dates, f.timeseries.values, f.flag_id);
+        html += renderTimeseriesSVG(f);
     } else {
         html += '<div class="no-data">No displacement time-series data available for this flag.<br>';
         html += '<span style="font-size:12px;color:#b2bec3;">Run the full pipeline with time-series export to populate this chart.</span></div>';
     }
     html += '</div>';
     html += '</div>';
+
+    if (f.ifg_strip) {
+        html += '<div class="detail-card"><h3>Interferograms</h3>';
+        html += '<img class="ifg-strip" src="/figures/' + encodeURI(f.ifg_strip.replace(/^figures\//, '')) + '" alt="Wrapped-phase tiles for each interferogram pair around flag ' + f.flag_id + '">';
+        html += '<div class="ifg-caption">Wrapped phase around the flag for every pair; the cross marks the flag centre. Motion confined to the flag that grows towards the event suggests real deformation. Fringes that also appear in winter pairs, or that follow the terrain across the whole tile, point to atmospheric or topographic phase instead.</div>';
+        html += '</div>';
+    }
 
     // --- Analyst Classification (between flag overview and detail panels) ---
     html += '<div class="actions-card">';
@@ -1559,7 +1852,6 @@ function initMap(flag) {
     });
 
     dashMap = L.map('flagMap', { layers: [osm] }).setView([flag.center_lat, flag.center_lon], 13);
-    L.control.layers({ 'Street': osm, 'Satellite': satellite }).addTo(dashMap);
 
     var sevColors = {CRITICAL: '#d63031', WARNING: '#fdcb6e', INFO: '#74b9ff', 'POST-EVENT': '#636e72'};
     for (var i = 0; i < FLAGS.length; i++) {
@@ -1593,6 +1885,21 @@ function initMap(flag) {
             fillOpacity: isSelected ? 0.9 : 0.5
         }).addTo(dashMap).bindPopup('Flag ' + fl.flag_id + ' (' + fl.severity + ')');
     }
+
+    var overlays = {};
+    var ks = SITE.known_source;
+    if (ks && ks.polygon && ks.polygon.length >= 3) {
+        overlays['Known source'] = L.polygon(ks.polygon, {
+            color: '#e84393', weight: 2, dashArray: '6 4', fillColor: '#e84393', fillOpacity: 0.10
+        }).bindTooltip(escapeHtml(ks.label || 'Known source'), {sticky: true}).addTo(dashMap);
+    }
+    var ex = SITE.extent;
+    if (ex && ex.length === 4) {
+        overlays['Analysed area'] = L.rectangle([[ex[0], ex[1]], [ex[2], ex[3]]], {
+            color: '#636e72', weight: 1.5, dashArray: '2 5', fill: false, interactive: false
+        }).addTo(dashMap);
+    }
+    L.control.layers({ 'Street': osm, 'Satellite': satellite }, overlays).addTo(dashMap);
 }
 
 // ---- Async panel loading ----
@@ -1837,7 +2144,7 @@ function toggleEnhancedMonitoring() {
 
 function renderInstrumentsPanel(data, el) {
     if (data.message && (!data.instruments || data.instruments.length === 0)) {
-        el.innerHTML = '<div class="panel-empty">' + escapeHtml(data.message) + '<br><span style="font-size:12px;color:var(--text-secondary);">Place an instruments.json file in the data directory to display deployed sensors.</span></div>';
+        el.innerHTML = '<div class="panel-empty">No in-situ instruments are registered for this site.<br><span style="font-size:12px;color:var(--text-secondary);">To list deployed sensors, add an instruments.json file to this run’s data folder.</span></div>';
         return;
     }
     if (!data.instruments || data.instruments.length === 0) {
@@ -1871,7 +2178,7 @@ function renderInstrumentsPanel(data, el) {
 
 function renderFieldReportsPanel(data, el) {
     if (data.message && (!data.reports || data.reports.length === 0)) {
-        el.innerHTML = '<div class="panel-empty">' + escapeHtml(data.message) + '<br><span style="font-size:12px;color:var(--text-secondary);">Place a field_reports.json file in the data directory to display reconnaissance data.</span></div>';
+        el.innerHTML = '<div class="panel-empty">No field reconnaissance has been reported for this site.<br><span style="font-size:12px;color:var(--text-secondary);">To show field observations, add a field_reports.json file to this run’s data folder.</span></div>';
         return;
     }
     if (!data.reports || data.reports.length === 0) {
@@ -2177,53 +2484,116 @@ function copyDraft() {
 }
 
 // ---- Timeseries SVG ----
-function renderTimeseriesSVG(dates, values, flagId) {
-    var w = 700, h = 200, pad = 70;
-    var n = dates.length;
-    if (n < 2) return '<div class="no-data">Insufficient data points</div>';
-    var vmin = Math.min.apply(null, values);
-    var vmax = Math.max.apply(null, values);
-    if (vmin === vmax) { vmin -= 1; vmax += 1; }
-    var margin = (vmax - vmin) * 0.1;
-    vmin -= margin; vmax += margin;
+// Time-proportional axis so acquisition gaps show; snow season shaded; event
+// date marked; per-pair coherence drawn beneath when quality data exist.
+function renderTimeseriesSVG(f) {
+    var dates = f.timeseries.dates, values = f.timeseries.values;
+    var pts = [];
+    for (var i = 0; i < dates.length; i++) {
+        if (values[i] == null || isNaN(values[i])) continue;
+        pts.push({t: Date.parse(dates[i] + 'T00:00:00Z'), v: values[i], d: dates[i]});
+    }
+    if (pts.length < 2) return '<div class="no-data">Insufficient data points</div>';
+    var pairs = (f.quality && f.quality.pairs) || [];
+    var DAY = 86400000;
+    var t0 = pts[0].t, t1 = pts[pts.length - 1].t;
+    var ev = SITE.event_date ? Date.parse(SITE.event_date + 'T00:00:00Z') : null;
+    if (ev != null && ev > t1 && ev - t1 < 90 * DAY) t1 = ev;
+    t1 += 4 * DAY;
+
+    var w = 700, h = 190, padL = 70, padR = 20, padT = 30;
+    var cohH = pairs.length ? 46 : 0, gap = pairs.length ? 22 : 0;
+    var axisY = padT + h + gap + cohH;
+    var totalH = axisY + 44;
+    var vmin = Infinity, vmax = -Infinity;
+    pts.forEach(function(p) { vmin = Math.min(vmin, p.v); vmax = Math.max(vmax, p.v); });
+    if (vmin === vmax) { vmin -= 0.01; vmax += 0.01; }
+    var m = (vmax - vmin) * 0.1; vmin -= m; vmax += m;
+    function X(t) { return padL + (t - t0) / (t1 - t0) * w; }
+    function Y(v) { return padT + h - (v - vmin) / (vmax - vmin) * h; }
 
     var cs = getComputedStyle(document.documentElement);
-    var cAxis = cs.getPropertyValue('--chart-axis').trim() || '#636e72';
-    var cGrid = cs.getPropertyValue('--chart-grid').trim() || '#dfe6e9';
-    var cLine = cs.getPropertyValue('--chart-line').trim() || '#0984e3';
-    var cLabel = cs.getPropertyValue('--chart-label').trim() || '#2d3436';
+    function tok(n, d) { return cs.getPropertyValue(n).trim() || d; }
+    var cAxis = tok('--chart-axis', '#636e72'), cGrid = tok('--chart-grid', '#dfe6e9'), cLine = tok('--chart-line', '#0984e3');
+    var cLabel = tok('--chart-label', '#2d3436'), cSnow = tok('--chart-snow', 'rgba(116,185,255,0.14)');
+    var cCoh = tok('--chart-coh', '#a4b0be'), cBad = tok('--chart-coh-bad', '#e17055'), cCard = tok('--bg-inset', '#f5f6fa');
 
-    var svg = '<svg viewBox="0 0 ' + (w + 2 * pad) + ' ' + (h + 2 * pad) + '" style="max-width:100%;height:auto;">';
-    svg += '<line x1="' + pad + '" y1="' + (h + pad) + '" x2="' + (w + pad) + '" y2="' + (h + pad) + '" stroke="' + cAxis + '" stroke-width="1"/>';
-    svg += '<line x1="' + pad + '" y1="' + pad + '" x2="' + pad + '" y2="' + (h + pad) + '" stroke="' + cAxis + '" stroke-width="1"/>';
-    for (var y = 0; y <= 4; y++) {
-        var yv = vmin + (vmax - vmin) * y / 4;
-        var yp = h + pad - (y / 4) * h;
-        var range = vmax - vmin;
-        var dp = range < 0.1 ? 4 : range < 1 ? 3 : 2;
-        svg += '<text x="' + (pad - 8) + '" y="' + yp + '" text-anchor="end" font-size="10" fill="' + cAxis + '">' + yv.toFixed(dp) + '</text>';
-        svg += '<line x1="' + pad + '" y1="' + yp + '" x2="' + (w + pad) + '" y2="' + yp + '" stroke="' + cGrid + '" stroke-width="0.5"/>';
+    var svg = '<svg viewBox="0 0 ' + (w + padL + padR) + ' ' + totalH + '" style="max-width:100%;height:auto;" role="img" aria-label="Displacement time series">';
+    // snow-season shading (month spans) across plot + coherence strip
+    var snow = SITE.snow_months || [];
+    if (snow.length) {
+        var d0 = new Date(t0), cur = Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth(), 1), shaded = false;
+        while (cur < t1) {
+            var dt = new Date(cur), next = Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 1);
+            if (snow.indexOf(dt.getUTCMonth() + 1) >= 0) {
+                var xa = X(Math.max(cur, t0)), xb = X(Math.min(next, t1));
+                svg += '<rect x="' + xa + '" y="' + padT + '" width="' + Math.max(0, xb - xa) + '" height="' + (axisY - padT) + '" fill="' + cSnow + '"/>';
+                shaded = true;
+            }
+            cur = next;
+        }
     }
-    var points = '';
-    for (var i = 0; i < n; i++) {
-        var x = pad + (i / (n - 1)) * w;
-        var yVal = h + pad - ((values[i] - vmin) / (vmax - vmin)) * h;
-        points += x + ',' + yVal + ' ';
+    // y grid + labels
+    var range = vmax - vmin, rangeCm = range * 100, dp = rangeCm < 1 ? 2 : rangeCm < 10 ? 1 : 0;
+    for (var yk = 0; yk <= 4; yk++) {
+        var yv = vmin + range * yk / 4, yp = Y(yv);
+        svg += '<line x1="' + padL + '" y1="' + yp + '" x2="' + (padL + w) + '" y2="' + yp + '" stroke="' + cGrid + '" stroke-width="0.5"/>';
+        svg += '<text x="' + (padL - 8) + '" y="' + (yp + 3) + '" text-anchor="end" font-size="10" fill="' + cAxis + '">' + (yv * 100).toFixed(dp) + '</text>';
     }
-    svg += '<polyline points="' + points.trim() + '" fill="none" stroke="' + cLine + '" stroke-width="2"/>';
-    for (var i = 0; i < n; i++) {
-        var x = pad + (i / (n - 1)) * w;
-        var yVal = h + pad - ((values[i] - vmin) / (vmax - vmin)) * h;
-        svg += '<circle cx="' + x + '" cy="' + yVal + '" r="3" fill="' + cLine + '"/>';
+    svg += '<line x1="' + padL + '" y1="' + padT + '" x2="' + padL + '" y2="' + (padT + h) + '" stroke="' + cAxis + '"/>';
+    // month ticks along the bottom axis
+    svg += '<line x1="' + padL + '" y1="' + axisY + '" x2="' + (padL + w) + '" y2="' + axisY + '" stroke="' + cAxis + '"/>';
+    var d0b = new Date(t0), tick = Date.UTC(d0b.getUTCFullYear(), d0b.getUTCMonth() + 1, 1);
+    var nMonths = (t1 - t0) / (30.4 * DAY), every = nMonths > 14 ? 3 : nMonths > 7 ? 2 : 1, mi = 0;
+    while (tick < t1) {
+        var td = new Date(tick);
+        if (mi % every === 0) {
+            var tx = X(tick);
+            svg += '<line x1="' + tx + '" y1="' + axisY + '" x2="' + tx + '" y2="' + (axisY + 4) + '" stroke="' + cAxis + '"/>';
+            var lab = MONTHS[td.getUTCMonth()] + (td.getUTCMonth() === 0 || mi === 0 ? ' ' + td.getUTCFullYear() : '');
+            svg += '<text x="' + tx + '" y="' + (axisY + 16) + '" text-anchor="middle" font-size="10" fill="' + cAxis + '">' + lab + '</text>';
+        }
+        tick = Date.UTC(td.getUTCFullYear(), td.getUTCMonth() + 1, 1); mi++;
     }
-    var xLabels = [0, Math.floor(n / 2), n - 1];
-    for (var k = 0; k < xLabels.length; k++) {
-        var idx = xLabels[k];
-        var x = pad + (idx / (n - 1)) * w;
-        svg += '<text x="' + x + '" y="' + (h + pad + 16) + '" text-anchor="middle" font-size="10" fill="' + cAxis + '">' + dates[idx] + '</text>';
+    // coherence strip: one bar per pair spanning its dates
+    if (pairs.length) {
+        var cy0 = padT + h + gap, cy1 = cy0 + cohH;
+        svg += '<text x="' + (padL - 8) + '" y="' + (cy0 + cohH / 2 + 3) + '" text-anchor="end" font-size="10" fill="' + cAxis + '">Coherence</text>';
+        svg += '<line x1="' + padL + '" y1="' + (cy1 - 0.3 * cohH) + '" x2="' + (padL + w) + '" y2="' + (cy1 - 0.3 * cohH) + '" stroke="' + cAxis + '" stroke-dasharray="2 3" stroke-width="0.7"/>';
+        for (var k = 0; k < pairs.length; k++) {
+            var pr = pairs[k], ra = Date.parse(pr.ref + 'T00:00:00Z'), rb = Date.parse(pr.sec + 'T00:00:00Z');
+            var bx = X(Math.max(ra, t0)), bw = Math.max(1, X(Math.min(rb, t1)) - bx - 1.5), bh = Math.max(0, Math.min(1, pr.coherence || 0)) * cohH;
+            svg += '<rect x="' + bx + '" y="' + (cy1 - bh) + '" width="' + bw + '" height="' + bh + '" fill="' + (pr.usable ? cCoh : cBad) + '">' +
+                   '<title>' + pr.ref + ' → ' + pr.sec + ': coherence ' + (pr.coherence != null ? pr.coherence.toFixed(2) : 'N/A') + ', ' + Math.round((pr.unreliable_fraction || 0) * 100) + '% unreliably unwrapped' + (pr.usable ? '' : ' (not usable)') + '</title></rect>';
+        }
     }
-    svg += '<text x="' + (w / 2 + pad) + '" y="' + (h + pad + 35) + '" text-anchor="middle" font-size="12" fill="' + cLabel + '">Date</text>';
-    svg += '<text transform="rotate(-90)" x="' + (-(h / 2 + pad)) + '" y="14" text-anchor="middle" font-size="12" fill="' + cLabel + '">Displacement (m)</text>';
+    // series: dashed across gaps longer than 1.6x the typical spacing
+    var steps = [];
+    for (var s2 = 1; s2 < pts.length; s2++) steps.push(pts[s2].t - pts[s2 - 1].t);
+    var sorted = steps.slice().sort(function(a, b) { return a - b; }), med = sorted[Math.floor(sorted.length / 2)];
+    for (var q2 = 1; q2 < pts.length; q2++) {
+        var isGap = steps[q2 - 1] > 1.6 * med;
+        svg += '<line x1="' + X(pts[q2 - 1].t) + '" y1="' + Y(pts[q2 - 1].v) + '" x2="' + X(pts[q2].t) + '" y2="' + Y(pts[q2].v) + '" stroke="' + cLine + '" stroke-width="2"' + (isGap ? ' stroke-dasharray="4 4" stroke-opacity="0.6"' : '') + '><title>' + (isGap ? 'Acquisition gap: ' + Math.round(steps[q2 - 1] / DAY) + ' days' : '') + '</title></line>';
+    }
+    // points: hollow when the pair ending on that date is unusable
+    var unusableEnd = {};
+    pairs.forEach(function(pr) { if (!pr.usable) unusableEnd[pr.sec] = true; });
+    pts.forEach(function(p) {
+        var bad = unusableEnd[p.d];
+        svg += '<circle cx="' + X(p.t) + '" cy="' + Y(p.v) + '" r="3.2" fill="' + (bad ? cCard : cLine) + '" stroke="' + cLine + '" stroke-width="1.5"><title>' + p.d + ': ' + (p.v * 100).toFixed(2) + ' cm' + (bad ? ' (pair unusable)' : '') + '</title></circle>';
+    });
+    // event marker
+    if (ev != null && ev >= t0 && ev <= t1) {
+        var exx = X(ev);
+        svg += '<line x1="' + exx + '" y1="' + (padT - 6) + '" x2="' + exx + '" y2="' + axisY + '" stroke="#d63031" stroke-width="1.5" stroke-dasharray="5 3"/>';
+        svg += '<text x="' + (exx - 4) + '" y="' + (padT - 10) + '" text-anchor="end" font-size="10" font-weight="600" fill="#d63031">Event ' + SITE.event_date + '</text>';
+    }
+    // legend + axis title
+    var lx = padL;
+    svg += '<text x="' + lx + '" y="14" font-size="10" fill="' + cAxis + '">';
+    svg += (snow.length ? '<tspan fill="#74b9ff">■</tspan> snow season   ' : '') + '● usable pair   ○ unusable pair   - - acquisition gap' + (pairs.length ? '   ▮ coherence (dashed line = 0.3; orange = unusable)' : '');
+    svg += '</text>';
+    svg += '<text transform="rotate(-90)" x="' + (-(padT + h / 2)) + '" y="16" text-anchor="middle" font-size="12" fill="' + cLabel + '">LOS displacement (cm)</text>';
     svg += '</svg>';
     return svg;
 }
@@ -2274,6 +2644,13 @@ function toggleTheme() {
     else if (cur === 'light') { root.removeAttribute('data-theme'); }
     else { root.setAttribute('data-theme', 'dark'); }
     updateThemeIcon();
+    rerenderChart();
+}
+// The chart reads theme colours when drawn, so redraw it after a theme change
+function rerenderChart() {
+    var el = document.getElementById('tsChart');
+    var f = FLAGS.find(function(x) { return x.flag_id === selectedFlagId; });
+    if (el && f && f.timeseries && f.timeseries.dates && f.timeseries.values) el.innerHTML = renderTimeseriesSVG(f);
 }
 function updateThemeIcon() {
     var btn = document.getElementById('themeToggle');
@@ -2283,11 +2660,18 @@ function updateThemeIcon() {
     btn.textContent = dark ? '☀' : '☾';
 }
 updateThemeIcon();
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateThemeIcon);
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() { updateThemeIcon(); rerenderChart(); });
 
 // Initial render
+(function initSidebarTools() {
+    var hasSource = FLAGS.some(function(f) { return f._dist != null; });
+    var hasQuality = FLAGS.some(function(f) { return !!f.quality; });
+    if (!hasSource) document.getElementById('sortDistanceOpt').remove();
+    if (!hasQuality) document.getElementById('relFilterLabel').style.display = 'none';
+})();
 renderStats();
-renderFlagList();
+refreshSidebar();
+pollPlaceNames();
 </script>
 <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle dark mode">&#9790;</button>
 </body>
@@ -2295,38 +2679,107 @@ renderFlagList();
 """
 
 
-def load_data_source(data_dir: str | Path) -> str | None:
-    """Return the ``data_source`` tag from flags.geojson collection properties."""
+def _collection_properties(data_dir: str | Path) -> dict:
     path = Path(data_dir) / "flags.geojson"
     if not path.exists():
-        return None
+        return {}
     try:
-        return json.loads(path.read_text()).get("properties", {}).get("data_source")
+        return json.loads(path.read_text()).get("properties", {}) or {}
     except (json.JSONDecodeError, OSError):
-        return None
+        return {}
 
 
-def _data_banner_html(data_source: str | None) -> str:
+def load_data_source(data_dir: str | Path) -> str | None:
+    """Return the ``data_source`` tag from flags.geojson collection properties."""
+    return _collection_properties(data_dir).get("data_source")
+
+
+def load_provenance(data_dir: str | Path) -> dict | None:
+    """Return the run ``provenance`` dict from flags.geojson, if recorded."""
+    return _collection_properties(data_dir).get("provenance")
+
+
+def _fmt_date(iso: str | None) -> str:
+    from datetime import date
+    try:
+        d = date.fromisoformat(iso)
+        return f"{d.day} {d:%b %Y}"
+    except (TypeError, ValueError):
+        return iso or "?"
+
+
+def _data_banner_html(data_source: str | None, provenance: dict | None = None) -> str:
     if data_source == "synthetic":
         return (
             '<div class="data-banner" role="status"><strong>SYNTHETIC DATA</strong>'
             "Flags, displacement series and failure forecasts are generated for "
             "demonstration and do not represent observed ground motion.</div>"
         )
-    return ""
+    if not provenance:
+        return ""
+    p = provenance
+    product = " ".join(str(x) for x in (p.get("sensor"), p.get("product")) if x)
+    track = ""
+    if p.get("track") is not None:
+        track = f"track {p['track']}"
+        if p.get("direction"):
+            track += f" {p['direction']}"
+    parts = [x for x in (product, track) if x]
+    if p.get("date_start") or p.get("date_end"):
+        span = f"{_fmt_date(p.get('date_start'))} – {_fmt_date(p.get('date_end'))}"
+        if p.get("n_pairs"):
+            span += f" · {p['n_pairs']} pairs"
+        parts.append(span)
+    if p.get("posting_m"):
+        parts.append(f"{p['posting_m']} m grid")
+    if p.get("coherence_mask") is not None:
+        parts.append(f"coherence mask {p['coherence_mask']}")
+    summary = html_escape(" · ".join(parts))
+    details = []
+    if p.get("reference"):
+        details.append("Referenced to " + html_escape(str(p["reference"])) + ".")
+    if p.get("excluded"):
+        details.append("Excluded: " + html_escape("; ".join(map(str, p["excluded"]))) + ".")
+    detail_html = (' <span class="banner-detail">' + " ".join(details) + "</span>") if details else ""
+    return (
+        '<div class="data-banner data-banner-observed" role="status">'
+        f"<strong>OBSERVED DATA</strong>{summary}.{detail_html}</div>"
+    )
+
+
+def _site_context(
+    config: dict, provenance: dict | None, data_source: str | None = None
+) -> dict:
+    """Site facts the dashboard JS needs: known source, event date, snow season, extent.
+
+    Synthetic scenes are not placed on the real source, so the known source
+    is withheld for them rather than reporting meaningless distances.
+    """
+    site = config.get("site", {}) if config else {}
+    ctx = {
+        "event_date": site.get("event_date"),
+        "known_source": None if data_source == "synthetic" else site.get("known_source"),
+        "snow_months": site.get("snow_months") or [],
+        "extent": (provenance or {}).get("extent"),
+    }
+    return _sanitize_for_json(ctx)
 
 
 def _render_html(
-    flags: list[dict], state: dict, site_name: str, data_source: str | None = None
+    flags: list[dict], state: dict, site_name: str, data_source: str | None = None,
+    provenance: dict | None = None, site: dict | None = None,
 ) -> str:
     """Render the dashboard HTML with flag data injected."""
-    flags_json = json.dumps(flags, default=str)
-    state_json = json.dumps(state)
+    def _js(obj) -> str:
+        # Keep "</script>" in any string from closing the inline script early
+        return json.dumps(obj, default=str).replace("</", "<\\/")
+
     html = _HTML_TEMPLATE
-    html = html.replace("$$FLAGS_JSON$$", flags_json)
-    html = html.replace("$$STATE_JSON$$", state_json)
-    html = html.replace("$$SITE_NAME$$", site_name)
-    html = html.replace("$$DATA_BANNER$$", _data_banner_html(data_source))
+    html = html.replace("$$FLAGS_JSON$$", _js(flags))
+    html = html.replace("$$STATE_JSON$$", _js(state))
+    html = html.replace("$$SITE_JSON$$", _js(site or {}))
+    html = html.replace("$$SITE_NAME$$", html_escape(site_name))
+    html = html.replace("$$DATA_BANNER$$", _data_banner_html(data_source, provenance))
     return html
 
 
@@ -2337,13 +2790,30 @@ def _render_html(
 def make_handler(
     flags: list[dict], state: dict, state_path: Path, site_name: str,
     data_source: str | None = None,
+    provenance: dict | None = None,
+    site: dict | None = None,
+    place_names_done: threading.Event | None = None,
 ):
     """
     Factory that returns a BaseHTTPRequestHandler subclass bound to
     the given flags and state.  Avoids module-level globals.
+
+    ``place_names_done`` is set by the background place-name lookup;
+    until then ``/api/place_names`` reports ``pending``.
     """
     state_lock = threading.Lock()
     data_dir = state_path.parent
+    figures_root = (data_dir / "figures").resolve()
+    flag_ids = {str(f.get("flag_id")) for f in flags}
+
+    def _audit(flag_id: str, classification: str, note: str) -> None:
+        try:
+            from glews.provenance import AlertAuditLog
+            AlertAuditLog(log_dir=data_dir / "audit").log_classification(
+                site_name, flag_id, classification, note
+            )
+        except Exception as exc:  # audit must never block a classification
+            logger.warning("Audit log write failed: %s", exc)
 
     class DashboardHandler(BaseHTTPRequestHandler):
 
@@ -2353,8 +2823,23 @@ def make_handler(
             params = parse_qs(parsed.query)
 
             if path in ("/", "/index.html"):
-                html = _render_html(flags, state, site_name, data_source)
+                html = _render_html(flags, state, site_name, data_source, provenance, site)
                 self._respond(200, "text/html; charset=utf-8", html.encode("utf-8"))
+
+            elif path.startswith("/figures/"):
+                self._serve_figure(path[len("/figures/"):])
+
+            elif path == "/api/place_names":
+                names = {
+                    str(f.get("flag_id")): {
+                        "name": f.get("place_name", ""),
+                        "name_en": f.get("place_name_en", ""),
+                    }
+                    for f in flags if f.get("place_name")
+                }
+                pending = place_names_done is not None and not place_names_done.is_set()
+                body = json.dumps({"names": names, "pending": pending})
+                self._respond(200, "application/json", body.encode())
 
             elif path == "/api/flags":
                 merged = _merge_flags_state(flags, state)
@@ -2418,6 +2903,15 @@ def make_handler(
 
             else:
                 self._respond(404, "text/plain", b"Not Found")
+
+        def _serve_figure(self, rel: str):
+            """Serve a PNG from <data_dir>/figures without leaving that folder."""
+            target = (figures_root / urllib.parse.unquote(rel)).resolve()
+            if (figures_root not in target.parents or target.suffix.lower() != ".png"
+                    or not target.is_file()):
+                self._respond(404, "text/plain", b"Not Found")
+                return
+            self._respond(200, "image/png", target.read_bytes())
 
         def _handle_geo_api(self, params, handler):
             try:
@@ -2485,10 +2979,54 @@ def make_handler(
                 with state_lock:
                     state[fid] = entry
                     save_state(state_path, state)
+                _audit(fid, classification, note)
 
                 self._respond(
                     200, "application/json", json.dumps(entry).encode()
                 )
+
+            elif path == "/api/classify_bulk":
+                length = int(self.headers.get("Content-Length", 0))
+                try:
+                    data = json.loads(self.rfile.read(length))
+                except json.JSONDecodeError:
+                    self._respond(400, "application/json",
+                                  json.dumps({"error": "Invalid JSON"}).encode())
+                    return
+                classification = data.get("classification")
+                reason = str(data.get("note", "")).strip()
+                ids = [str(i) for i in data.get("flag_ids", [])]
+                if classification not in VALID_CLASSIFICATIONS:
+                    self._respond(400, "application/json",
+                                  json.dumps({"error": "Invalid classification"}).encode())
+                    return
+                if not ids or not reason:
+                    self._respond(400, "application/json", json.dumps(
+                        {"error": "flag_ids and a reason (note) are required"}).encode())
+                    return
+                unknown = [i for i in ids if i not in flag_ids]
+                if unknown:
+                    self._respond(400, "application/json", json.dumps(
+                        {"error": "Unknown flag ids: " + ", ".join(unknown)}).encode())
+                    return
+                stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                updated = {}
+                with state_lock:
+                    for fid in ids:
+                        prev = state.get(fid, {})
+                        note = reason
+                        if prev.get("note") and reason not in prev["note"]:
+                            note = prev["note"] + "\n" + reason
+                        entry = dict(prev)
+                        entry.update({"classification": classification, "note": note,
+                                      "updated_at": stamp, "bulk": True})
+                        state[fid] = entry
+                        updated[fid] = entry
+                    save_state(state_path, state)
+                for fid in ids:
+                    _audit(fid, classification, "[bulk] " + reason)
+                self._respond(200, "application/json",
+                              json.dumps({"updated": updated}).encode())
 
             elif path == "/api/monitoring/enhance":
                 length = int(self.headers.get("Content-Length", 0))
@@ -2555,10 +3093,38 @@ def serve(data_dir: str, port: int, config: dict) -> None:
     _reclassify_post_events(flags, event_date)
     state = load_state(state_path)
 
-    _resolve_flag_place_names(flags, data_path)
     data_source = load_data_source(data_path)
+    provenance = load_provenance(data_path)
+    site = _site_context(config, provenance, data_source)
 
-    handler_cls = make_handler(flags, state, state_path, site_name, data_source)
+    # Place names come from Overpass, which can take tens of seconds or fail.
+    # Resolve them in the background so the page is served immediately; the
+    # browser polls /api/place_names and fills them in when ready.
+    place_names_done = threading.Event()
+    try:  # names cached by an earlier run are applied before the first page load
+        cached_names = json.loads((data_path / "place_names.json").read_text())
+        for f in flags:
+            entry = cached_names.get(str(f.get("flag_id")))
+            if entry:
+                f["place_name"] = entry.get("name", "")
+                f["place_name_en"] = entry.get("name_en", "")
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    def _resolve_names():
+        try:
+            _resolve_flag_place_names(flags, data_path)
+        except Exception as exc:
+            logger.info("Place-name lookup failed: %s", exc)
+        finally:
+            place_names_done.set()
+
+    threading.Thread(target=_resolve_names, name="place-names", daemon=True).start()
+
+    handler_cls = make_handler(
+        flags, state, state_path, site_name, data_source,
+        provenance=provenance, site=site, place_names_done=place_names_done,
+    )
 
     try:
         from http.server import ThreadingHTTPServer
