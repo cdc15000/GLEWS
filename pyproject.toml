@@ -30,6 +30,10 @@ dependencies = [
 processing = [
     "mintpy>=1.5",         # InSAR time-series (depends on ISCE-2 for processing)
 ]
+names = [
+    "pypinyin>=0.50",              # romanize Chinese place names lacking English
+    "indic-transliteration>=2.3",  # romanize Devanagari place names lacking English
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",

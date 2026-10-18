@@ -19,6 +19,7 @@ import os
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -295,6 +296,56 @@ def _get_elevation(lat: float, lon: float) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# English place names
+# ---------------------------------------------------------------------------
+
+_EN_NAME_TAGS = ("name:en", "int_name", "name:zh-Latn-pinyin", "name:ne-Latn", "name:bo-Latn")
+
+
+def _romanize(name: str) -> str:
+    """Romanize a Chinese (pinyin) or Devanagari (IAST) name; "" if not possible.
+
+    Used only when OpenStreetMap has no English or Latin-script name, and
+    always labelled as a romanization rather than an official English name.
+    """
+    if not name:
+        return ""
+    if any("\u4e00" <= ch <= "\u9fff" for ch in name):
+        try:
+            from pypinyin import lazy_pinyin
+        except ImportError:
+            return ""
+        return "".join(lazy_pinyin(name)).capitalize()
+    if any("\u0900" <= ch <= "\u097f" for ch in name):
+        try:
+            from indic_transliteration import sanscript
+        except ImportError:
+            return ""
+        words = []
+        for word in name.split():
+            latin = sanscript.transliterate(word, sanscript.DEVANAGARI, sanscript.IAST)
+            # Nepali drops the inherent final vowel that IAST writes out
+            if len(latin) > 3 and latin.endswith("a") and word[-1] not in "\u093e\u0906\u0905":
+                latin = latin[:-1]
+            words.append(latin.capitalize())
+        return " ".join(words)
+    return ""
+
+
+def _english_name(tags: dict, name: str | None = None) -> tuple[str, str]:
+    """Return (english_name, source) for an OSM element.
+
+    source is "osm" for a name tagged in OpenStreetMap, "romanized" for a
+    pinyin/IAST fallback, or "" when nothing is available.
+    """
+    for key in _EN_NAME_TAGS:
+        if tags.get(key):
+            return tags[key], "osm"
+    roman = _romanize(name if name is not None else tags.get("name", ""))
+    return (roman, "romanized") if roman else ("", "")
+
+
 _OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
@@ -321,7 +372,7 @@ def _nominatim_fallback(lat: float, lon: float, radius_km: int = 20) -> list[dic
     seen: set[str] = set()
 
     def _add(name: str, ftype: str, flat: float, flon: float,
-             name_en: str = ""):
+             name_en: str = "", name_en_source: str = ""):
         key = f"{name}:{flat:.3f}"
         if key in seen or not name:
             return
@@ -333,6 +384,7 @@ def _nominatim_fallback(lat: float, lon: float, radius_km: int = 20) -> list[dic
         }
         if name_en and name_en != name:
             entry["name_en"] = name_en
+            entry["name_en_source"] = name_en_source
         features.append(entry)
 
     try:
@@ -348,15 +400,10 @@ def _nominatim_fallback(lat: float, lon: float, radius_km: int = 20) -> list[dic
                 continue
             nd = p.get("namedetails", {})
             local_name = nd.get("name", p.get("name", ""))
-            en_name = (
-                nd.get("name:en")
-                or nd.get("name:zh-Latn-pinyin")
-                or nd.get("int_name")
-                or ""
-            )
+            en_name, en_src = _english_name(nd, local_name)
             _add(local_name, ptype,
                  float(p.get("lat", 0)), float(p.get("lon", 0)),
-                 name_en=en_name)
+                 name_en=en_name, name_en_source=en_src)
     except Exception as exc:
         logger.info("Nominatim search failed: %s", exc)
 
@@ -375,15 +422,10 @@ def _nominatim_fallback(lat: float, lon: float, radius_km: int = 20) -> list[dic
             if rtype not in ("administrative", "county", "state", "country", ""):
                 nd = data.get("namedetails", {})
                 local_name = nd.get("name", data.get("name", ""))
-                en_name = (
-                    nd.get("name:en")
-                    or nd.get("name:zh-Latn-pinyin")
-                    or nd.get("int_name")
-                    or ""
-                )
+                en_name, en_src = _english_name(nd, local_name)
                 _add(local_name, rtype,
                      float(data.get("lat", 0)), float(data.get("lon", 0)),
-                     name_en=en_name)
+                     name_en=en_name, name_en_source=en_src)
         except Exception:
             pass
 
@@ -419,13 +461,14 @@ def _get_exposure(lat: float, lon: float) -> dict:
     if result is not None:
         for elem in result.get("elements", []):
             tags = elem.get("tags", {})
-            name = tags.get("name", tags.get("place", tags.get("amenity", "unknown")))
-            name_en = (
-                tags.get("name:en")
-                or tags.get("name:zh-Latn-pinyin")
-                or tags.get("int_name")
-                or ""
-            )
+            # Unnamed OSM nodes used to fall back to their type ("hamlet"),
+            # which then showed in the Name column. Keep the name empty
+            # instead and let the panel label it as unnamed.
+            name = (tags.get("name") or tags.get("official_name")
+                    or tags.get("alt_name") or "")
+            name_en, name_en_source = _english_name(tags, name)
+            if not name and name_en:
+                name, name_en, name_en_source = name_en, "", ""
             feat_type = tags.get("place") or tags.get("amenity") or "unknown"
             el_lat = elem.get("lat")
             el_lon = elem.get("lon")
@@ -441,6 +484,7 @@ def _get_exposure(lat: float, lon: float) -> dict:
             }
             if name_en and name_en != name:
                 entry["name_en"] = name_en
+                entry["name_en_source"] = name_en_source
             features.append(entry)
     else:
         features = _nominatim_fallback(lat, lon)
@@ -493,6 +537,167 @@ def _get_sentinel2(lat: float, lon: float) -> dict:
         "total_scenes": result.get("numberMatched", 0),
         "scenes": scenes,
     }
+
+
+WINDY_KEY_ENV = "GLEWS_WINDY_API_KEY"
+_WINDY_WEBCAMS_URL = "https://api.windy.com/webcams/api/v3/webcams"
+# Free-tier image URLs carry a token that expires after 10 minutes, so
+# results are cached for less than that and never written to disk.
+WEBCAM_CACHE_TTL_S = 300
+WEBCAM_RADII_KM = (50, 150)
+
+
+YOUTUBE_KEY_ENV = "GLEWS_YOUTUBE_API_KEY"
+DEFAULT_WEBCAM_REGISTRY = Path(__file__).resolve().parents[2] / "config" / "webcams.yaml"
+
+
+def load_webcam_registry(path: str | Path | None = None) -> list[dict]:
+    """Load the curated webcam list (config/webcams.yaml); [] if absent or invalid."""
+    import yaml
+
+    path = Path(path) if path else DEFAULT_WEBCAM_REGISTRY
+    if not path.exists():
+        return []
+    try:
+        raw = yaml.safe_load(path.read_text()) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        logger.warning("Could not read webcam registry %s: %s", path, exc)
+        return []
+    providers = raw.get("providers", {}) or {}
+    cams = []
+    for w in raw.get("webcams", []) or []:
+        if w.get("lat") is None or w.get("lon") is None or not w.get("youtube_video_id"):
+            logger.warning("Skipping webcam entry without lat/lon/youtube_video_id: %s", w.get("id"))
+            continue
+        prov = providers.get(w.get("provider"), {})
+        cams.append({**w, "provider_name": prov.get("name", w.get("provider", "")),
+                     "provider_url": prov.get("url", "")})
+    return cams
+
+
+def _youtube_live_status(video_ids: list[str]) -> dict[str, str]:
+    """Map video id -> "live" / "upcoming" / "ended" / "unavailable" via the YouTube Data API.
+
+    Returns {} when GLEWS_YOUTUBE_API_KEY is unset or the call fails, and the
+    panel then reports the status as unknown.
+    """
+    key = os.environ.get(YOUTUBE_KEY_ENV, "").strip()
+    if not key or not video_ids:
+        return {}
+    query = urllib.parse.urlencode({"part": "snippet", "id": ",".join(video_ids[:50])})
+    try:
+        data = _fetch_json(f"https://www.googleapis.com/youtube/v3/videos?{query}",
+                           headers={"X-Goog-Api-Key": key}, timeout=10)
+    except Exception as exc:
+        logger.info("YouTube status lookup failed: %s", exc)
+        return {}
+    found = {item["id"]: (item.get("snippet", {}).get("liveBroadcastContent") or "none")
+             for item in data.get("items", [])}
+    return {vid: {"live": "live", "upcoming": "upcoming"}.get(found[vid], "ended")
+            if vid in found else "unavailable" for vid in video_ids}
+
+
+def _curated_webcams(lat: float, lon: float, registry: list[dict], radius_km: float) -> list[dict]:
+    out = []
+    for w in registry:
+        d = _haversine(lat, lon, w["lat"], w["lon"])
+        if d > radius_km:
+            continue
+        vid = w["youtube_video_id"]
+        out.append({
+            "id": w.get("id", vid), "title": w.get("name", "Webcam"),
+            "status": None, "city": "", "lat": w["lat"], "lon": w["lon"],
+            "distance_km": round(d, 1),
+            # hqdefault_live.jpg is YouTube's thumbnail for a live stream
+            "image": f"https://i.ytimg.com/vi/{vid}/hqdefault_live.jpg",
+            "image_daylight": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg",
+            "last_updated": "", "url": f"https://www.youtube.com/watch?v={vid}",
+            "faces": w.get("faces", ""), "elevation_m": w.get("elevation_m"),
+            "provider": w.get("provider_name", ""), "provider_url": w.get("provider_url", ""),
+            "approximate_location": w.get("coord_precision", "approximate") != "exact",
+            "video_id": vid,
+        })
+    return out
+
+
+def _windy_webcams(lat: float, lon: float, radius: float, key: str) -> list[dict]:
+    query = urllib.parse.urlencode({
+        "nearby": f"{lat:.4f},{lon:.4f},{radius}",
+        "include": "images,location,urls",
+        "limit": 20,
+    })
+    data = _fetch_json(f"{_WINDY_WEBCAMS_URL}?{query}",
+                       headers={"x-windy-api-key": key}, timeout=10)
+    cams = []
+    for w in data.get("webcams", []) or []:
+        loc = w.get("location") or {}
+        wlat, wlon = loc.get("latitude"), loc.get("longitude")
+        if wlat is None or wlon is None:
+            continue
+        images = w.get("images") or {}
+        current = images.get("current") or {}
+        daylight = images.get("daylight") or {}
+        urls = w.get("urls") or {}
+        cams.append({
+            "id": w.get("webcamId"),
+            "title": w.get("title") or "Untitled webcam",
+            "status": w.get("status"),
+            "city": loc.get("city") or loc.get("region") or "",
+            "lat": wlat, "lon": wlon,
+            "distance_km": round(_haversine(lat, lon, wlat, wlon), 1),
+            "image": current.get("preview") or current.get("thumbnail") or "",
+            "image_daylight": daylight.get("preview") or daylight.get("thumbnail") or "",
+            "last_updated": w.get("lastUpdatedOn") or "",
+            "url": urls.get("detail") or (f"https://www.windy.com/webcams/{w['webcamId']}"
+                                          if w.get("webcamId") else ""),
+            "provider": "Windy", "provider_url": "https://www.windy.com/",
+        })
+    return cams
+
+
+def _get_webcams(lat: float, lon: float, registry: list[dict] | tuple = ()) -> dict:
+    """Nearby webcams: the curated registry plus Windy's listings (key from env).
+
+    Searches 50 km, then 150 km. Windy is queried server-side so its key
+    never reaches the browser.
+    """
+    key = os.environ.get(WINDY_KEY_ENV, "").strip()
+    if not key and not registry:
+        return {"configured": False, "webcams": []}
+    windy_error = None
+    for radius in WEBCAM_RADII_KM:
+        cams = _curated_webcams(lat, lon, list(registry), radius)
+        if key and windy_error is None:
+            try:
+                cams += _windy_webcams(lat, lon, radius, key)
+            except urllib.error.HTTPError as exc:
+                if exc.code not in (401, 403):
+                    raise
+                windy_error = (f"Windy rejected the API key (HTTP {exc.code}). "
+                               f"Check {WINDY_KEY_ENV} and that the key is for the Webcams API.")
+        if cams:
+            status = _youtube_live_status([c["video_id"] for c in cams if c.get("video_id")])
+            for c in cams:
+                if c.get("video_id"):
+                    c["status"] = status.get(c["video_id"], "unknown")
+            cams.sort(key=lambda c: c["distance_km"])
+            if radius > WEBCAM_RADII_KM[0]:
+                # Distant cameras only give regional context, so show one per site
+                seen, unique = set(), []
+                for c in cams:
+                    spot = (round(c["lat"], 2), round(c["lon"], 2))
+                    if spot not in seen:
+                        seen.add(spot)
+                        unique.append(c)
+                cams = unique
+            out = {"configured": True, "radius_km": radius, "webcams": cams[:8]}
+            if windy_error:
+                out["error"] = windy_error
+            return out
+    out = {"configured": True, "radius_km": WEBCAM_RADII_KM[-1], "webcams": []}
+    if windy_error:
+        out["error"] = windy_error
+    return out
 
 
 def _get_weather(lat: float, lon: float) -> dict:
@@ -941,6 +1146,19 @@ def _get_news(lat: float, lon: float, region: str = "") -> dict:
     return {"articles": interleaved[:15]}
 
 
+def _apply_place_name(flag: dict, entry: dict) -> None:
+    """Copy a cached place-name entry onto a flag, romanizing if no English name."""
+    name = entry.get("name", "")
+    name_en = entry.get("name_en", "")
+    source = entry.get("name_en_source", "osm" if name_en else "")
+    if not name_en:
+        name_en = _romanize(name)
+        source = "romanized" if name_en else ""
+    flag["place_name"] = name
+    flag["place_name_en"] = name_en
+    flag["place_name_en_source"] = source
+
+
 def _resolve_flag_place_names(flags: list[dict], data_dir: Path) -> None:
     """Resolve nearest place name for each flag via one Overpass query.
 
@@ -959,8 +1177,7 @@ def _resolve_flag_place_names(flags: list[dict], data_dir: Path) -> None:
     for f in flags:
         fid = str(f.get("flag_id"))
         if fid in cached:
-            f["place_name"] = cached[fid].get("name", "")
-            f["place_name_en"] = cached[fid].get("name_en", "")
+            _apply_place_name(f, cached[fid])
         else:
             all_resolved = False
 
@@ -994,15 +1211,11 @@ def _resolve_flag_place_names(flags: list[dict], data_dir: Path) -> None:
                 name = tags.get("name", "")
                 if not name:
                     continue
-                name_en = (
-                    tags.get("name:en")
-                    or tags.get("name:zh-Latn-pinyin")
-                    or tags.get("int_name")
-                    or ""
-                )
+                name_en, name_en_source = _english_name(tags, name)
                 places.append({
                     "name": name,
                     "name_en": name_en,
+                    "name_en_source": name_en_source,
                     "lat": elem["lat"],
                     "lon": elem["lon"],
                 })
@@ -1030,10 +1243,10 @@ def _resolve_flag_place_names(flags: list[dict], data_dir: Path) -> None:
                 best_dist = d
                 best = p
         if best and best_dist < 30:
-            entry = {"name": best["name"], "name_en": best.get("name_en", "")}
+            entry = {"name": best["name"], "name_en": best.get("name_en", ""),
+                     "name_en_source": best.get("name_en_source", "")}
             cached[fid] = entry
-            f["place_name"] = entry["name"]
-            f["place_name_en"] = entry.get("name_en", "")
+            _apply_place_name(f, entry)
 
     try:
         cache_path.write_text(json.dumps(cached, ensure_ascii=False, indent=2))
@@ -1224,6 +1437,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .bulk-form .bulk-actions button { padding: 5px 10px; border-radius: 4px; font-size: 12px; cursor: pointer; border: 1px solid #485460; background: transparent; color: #dfe6e9; }
 .bulk-form .bulk-actions button.confirm { background: #00b894; border-color: #00b894; color: #fff; font-weight: 600; }
 .bulk-form .bulk-error { color: #ff7675; }
+
+/* Webcams */
+.webcam-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.webcam { display: block; text-decoration: none; color: inherit; background: var(--bg-inset); border-radius: 6px; overflow: hidden; }
+.webcam:hover, .webcam:focus-visible { outline: 2px solid var(--accent); }
+.webcam img, .webcam-noimg { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; background: var(--border); }
+.webcam-noimg { display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--text-secondary); }
+.webcam-title { font-size: 12.5px; font-weight: 600; padding: 6px 8px 0; color: var(--text-primary); }
+.webcam-meta { font-size: 11.5px; color: var(--text-secondary); padding: 2px 8px 8px; }
+.webcam-provider { padding-top: 0; font-size: 11px; opacity: 0.85; }
+.webcam-credit { font-size: 11px; color: var(--text-secondary); margin-top: 8px; }
+.webcam-credit a { color: var(--accent); }
 
 /* Interferogram strip */
 .ifg-strip { width: 100%; height: auto; display: block; border-radius: 4px; background: #fff; }
@@ -1437,6 +1662,16 @@ function formatDistance(d) {
     if (d === 0) return 'on known source';
     return (d < 10 ? d.toFixed(1) : Math.round(d)) + ' km from source';
 }
+// "Local (English)" label; romanized names are italic and say so on hover
+function placeLabel(name, nameEn, source) {
+    var out = escapeHtml(name || '');
+    if (nameEn && nameEn !== name) {
+        var en = escapeHtml(nameEn);
+        if (source === 'romanized') en = '<i title="Romanized: OpenStreetMap has no English name for this place">' + en + '</i>';
+        out += out ? ' (' + en + ')' : en;
+    }
+    return out;
+}
 function reliabilityOf(f) { return (f.quality && f.quality.reliability) || null; }
 function qualitySummary(q) {
     var parts = [];
@@ -1514,9 +1749,7 @@ function renderFlagList() {
         }
         html += '</span></div>';
         if (f.place_name) {
-            var placeLabel = escapeHtml(f.place_name);
-            if (f.place_name_en && f.place_name_en !== f.place_name) placeLabel += ' (' + escapeHtml(f.place_name_en) + ')';
-            html += '<div class="flag-meta" style="margin-bottom:2px;">' + placeLabel + '</div>';
+            html += '<div class="flag-meta" style="margin-bottom:2px;">' + placeLabel(f.place_name, f.place_name_en, f.place_name_en_source) + '</div>';
         }
         html += '<div class="flag-meta">Score: ' + (f.score != null ? f.score.toFixed(2) : 'N/A');
         html += ' &middot; Z: ' + (f.peak_zscore != null ? f.peak_zscore.toFixed(1) : 'N/A');
@@ -1623,8 +1856,9 @@ function pollPlaceNames() {
         var resp = JSON.parse(xhr.responseText), changed = false;
         for (var i = 0; i < FLAGS.length; i++) {
             var n = resp.names[String(FLAGS[i].flag_id)];
-            if (n && n.name !== FLAGS[i].place_name) {
-                FLAGS[i].place_name = n.name; FLAGS[i].place_name_en = n.name_en; changed = true;
+            if (n && (n.name !== FLAGS[i].place_name || n.name_en !== FLAGS[i].place_name_en)) {
+                FLAGS[i].place_name = n.name; FLAGS[i].place_name_en = n.name_en;
+                FLAGS[i].place_name_en_source = n.name_en_source; changed = true;
             }
         }
         if (changed) renderFlagList();
@@ -1695,9 +1929,7 @@ function renderDetail(flagId) {
     html += '<div class="detail-card">';
     var locationLabel = formatCoord(f.center_lat, f.center_lon);
     if (f.place_name) {
-        var pn = escapeHtml(f.place_name);
-        if (f.place_name_en && f.place_name_en !== f.place_name) pn += ' (' + escapeHtml(f.place_name_en) + ')';
-        locationLabel = pn + ' — ' + locationLabel;
+        locationLabel = placeLabel(f.place_name, f.place_name_en, f.place_name_en_source) + ' — ' + locationLabel;
     }
     html += '<h3>Flag ' + f.flag_id + ' — ' + locationLabel;
     html += ' <span class="severity-badge severity-' + f.severity + '">' + f.severity + '</span></h3>';
@@ -1797,6 +2029,11 @@ function renderDetail(flagId) {
     html += '<div class="info-panel"><h3><span class="panel-icon">&#128296;</span> In-Situ Instruments</h3><div class="panel-content" id="panel-instruments"></div></div>';
     html += '</div>';
 
+    // --- Webcams (full width) ---
+    html += '<div class="info-panels">';
+    html += '<div class="info-panel" style="grid-column: 1 / -1;"><h3><span class="panel-icon">&#128247;</span> Webcams</h3><div class="panel-content" id="panel-webcams"></div></div>';
+    html += '</div>';
+
     // --- Info panels row 5: Field Reconnaissance ---
     html += '<div class="info-panels">';
     html += '<div class="info-panel" style="grid-column: 1 / -1;"><h3><span class="panel-icon">&#128269;</span> Field Reconnaissance</h3><div class="panel-content" id="panel-fieldreports"></div></div>';
@@ -1829,6 +2066,7 @@ function renderDetail(flagId) {
         loadPanel('monitoring', f.center_lat, f.center_lon);
         loadPanel('instruments', f.center_lat, f.center_lon);
         loadPanel('fieldreports', f.center_lat, f.center_lon);
+        loadPanel('webcams', f.center_lat, f.center_lon);
         var newsRegion = '';
         if (f.place_name_en) newsRegion = f.place_name_en;
         else if (f.place_name) newsRegion = f.place_name;
@@ -1952,6 +2190,7 @@ function renderPanelData(panel, data, el) {
         case 'instruments': renderInstrumentsPanel(data, el); break;
         case 'fieldreports': renderFieldReportsPanel(data, el); break;
         case 'news': renderNewsPanel(data, el); break;
+        case 'webcams': renderWebcamsPanel(data, el); break;
         default: el.innerHTML = '<div class="panel-empty">Unknown panel</div>';
     }
 }
@@ -2063,8 +2302,17 @@ function renderExposurePanel(data, el) {
     html += '<table class="panel-table"><tr><th>Name</th><th>Type</th><th>Dist</th></tr>';
     for (var i = 0; i < data.features.length; i++) {
         var feat = data.features[i];
-        var displayName = escapeHtml(feat.name);
-        if (feat.name_en) displayName += ' <span style="color:var(--text-secondary);font-size:12px;">(' + escapeHtml(feat.name_en) + ')</span>';
+        var displayName;
+        if (!feat.name) {
+            displayName = '<span style="color:var(--text-secondary);font-style:italic;">Unnamed ' + escapeHtml(feat.type) + '</span>';
+        } else {
+            displayName = escapeHtml(feat.name);
+            if (feat.name_en) {
+                var en = escapeHtml(feat.name_en);
+                if (feat.name_en_source === 'romanized') en = '<i title="Romanized: OpenStreetMap has no English name for this place">' + en + '</i>';
+                displayName += ' <span style="color:var(--text-secondary);font-size:12px;">(' + en + ')</span>';
+            }
+        }
         html += '<tr><td>' + displayName + '</td>';
         html += '<td style="color:var(--text-secondary);">' + escapeHtml(feat.type) + '</td>';
         html += '<td>' + feat.distance_km.toFixed(1) + ' km</td></tr>';
@@ -2174,6 +2422,45 @@ function renderInstrumentsPanel(data, el) {
     }
     html += '</table>';
     el.innerHTML = html;
+}
+
+function renderWebcamsPanel(data, el) {
+    if (!data.configured) {
+        el.innerHTML = '<div class="panel-empty">Webcams are not set up.<br><span style="font-size:12px;color:var(--text-secondary);">Add cameras to config/webcams.yaml, or set the GLEWS_WINDY_API_KEY environment variable to a Windy Webcams API key, and restart the dashboard.</span></div>';
+        return;
+    }
+    var cams = data.webcams || [];
+    var providers = {};
+    cams.forEach(function(c) { if (c.provider) providers[c.provider] = c.provider_url; });
+    if (!cams.length) providers['Windy'] = 'https://www.windy.com/';
+    var credit = '<div class="webcam-credit">Webcams provided by ' + Object.keys(providers).map(function(p) {
+        return providers[p] ? '<a href="' + escapeHtml(providers[p]) + '" target="_blank" rel="noopener">' + escapeHtml(p) + '</a>' : escapeHtml(p);
+    }).join(', ') + '</div>';
+    var err = data.error ? '<div class="panel-error">' + escapeHtml(data.error) + '</div>' : '';
+    if (!cams.length) {
+        el.innerHTML = err + '<div class="panel-empty">No webcams within ' + data.radius_km + ' km of this flag.</div>' + credit;
+        return;
+    }
+    var statusLabel = {live: 'Live', upcoming: 'Scheduled', ended: 'Stream ended', unavailable: 'Stream removed', unknown: 'Live status unknown'};
+    var html = err + '<div class="webcam-grid">';
+    for (var i = 0; i < cams.length; i++) {
+        var c = cams[i];
+        var img = c.image || c.image_daylight;
+        var fallback = c.image_daylight && c.image_daylight !== img ? ' onerror="this.onerror=null;this.src=\'' + escapeHtml(c.image_daylight) + '\'"' : '';
+        html += '<a class="webcam" href="' + escapeHtml(c.url) + '" target="_blank" rel="noopener">';
+        html += img ? '<img src="' + escapeHtml(img) + '" alt="' + escapeHtml(c.title) + '" loading="lazy"' + fallback + '>' : '<div class="webcam-noimg">No image</div>';
+        html += '<div class="webcam-title">' + escapeHtml(c.title) + '</div>';
+        var meta = [c.distance_km.toFixed(1) + ' km away'];
+        if (c.elevation_m) meta.push(c.elevation_m.toLocaleString() + ' m');
+        if (c.status && c.status !== 'active') meta.push(statusLabel[c.status] || escapeHtml(c.status));
+        html += '<div class="webcam-meta">' + meta.join(' · ') + '</div>';
+        if (c.faces) html += '<div class="webcam-meta">Faces: ' + escapeHtml(c.faces) + ' <span title="Taken from the stream title; not checked against the view">(unverified)</span></div>';
+        html += '<div class="webcam-meta webcam-provider">' + escapeHtml(c.provider || '') + (c.approximate_location ? ' · location approximate' : '') + '</div>';
+        html += '</a>';
+    }
+    html += '</div>';
+    if (data.radius_km > 50) html += '<div class="webcam-meta" style="margin-top:6px;">None within 50 km; showing the nearest within ' + data.radius_km + ' km. Distant cameras show regional weather and snow cover, not the flagged slope.</div>';
+    el.innerHTML = html + credit;
 }
 
 function renderFieldReportsPanel(data, el) {
@@ -2793,6 +3080,7 @@ def make_handler(
     provenance: dict | None = None,
     site: dict | None = None,
     place_names_done: threading.Event | None = None,
+    webcam_registry: list[dict] | None = None,
 ):
     """
     Factory that returns a BaseHTTPRequestHandler subclass bound to
@@ -2834,6 +3122,7 @@ def make_handler(
                     str(f.get("flag_id")): {
                         "name": f.get("place_name", ""),
                         "name_en": f.get("place_name_en", ""),
+                        "name_en_source": f.get("place_name_en_source", ""),
                     }
                     for f in flags if f.get("place_name")
                 }
@@ -2891,6 +3180,12 @@ def make_handler(
                 self._handle_geo_api(params, lambda lat, lon: _cached_call(
                     f"fr:{lat:.4f},{lon:.4f}", _get_field_reports, lat, lon, data_dir,
                     ttl=60,
+                ))
+
+            elif path == "/api/webcams":
+                self._handle_geo_api(params, lambda lat, lon: _cached_call(
+                    f"cam:{lat:.3f},{lon:.3f}", _get_webcams, lat, lon,
+                    tuple(webcam_registry or ()), ttl=WEBCAM_CACHE_TTL_S,
                 ))
 
             elif path == "/api/news":
@@ -3106,8 +3401,7 @@ def serve(data_dir: str, port: int, config: dict) -> None:
         for f in flags:
             entry = cached_names.get(str(f.get("flag_id")))
             if entry:
-                f["place_name"] = entry.get("name", "")
-                f["place_name_en"] = entry.get("name_en", "")
+                _apply_place_name(f, entry)
     except (OSError, json.JSONDecodeError):
         pass
 
@@ -3124,6 +3418,7 @@ def serve(data_dir: str, port: int, config: dict) -> None:
     handler_cls = make_handler(
         flags, state, state_path, site_name, data_source,
         provenance=provenance, site=site, place_names_done=place_names_done,
+        webcam_registry=load_webcam_registry(config.get("webcams_file")),
     )
 
     try:

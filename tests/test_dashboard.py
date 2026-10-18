@@ -535,7 +535,7 @@ class TestLiveRoutes:
         status, body = _get(base + "/api/place_names")
         data = json.loads(body)
         assert status == 200 and data["pending"] is True
-        assert data["names"] == {"1": {"name": "A", "name_en": ""}}
+        assert data["names"] == {"1": {"name": "A", "name_en": "", "name_en_source": ""}}
         done.set()
         assert json.loads(_get(base + "/api/place_names")[1])["pending"] is False
 
@@ -582,3 +582,157 @@ def test_site_context_withholds_source_for_synthetic():
     real = _site_context(cfg, {"extent": [1, 2, 3, 4]}, "nisar")
     assert real["known_source"]["polygon"] and real["extent"] == [1, 2, 3, 4]
     assert real["snow_months"] == [1, 2]
+
+
+class TestEnglishNames:
+    def test_osm_english_tag_wins(self):
+        from glews.dashboard import _english_name
+        assert _english_name({"name": "贡布", "name:en": "Gongbu"}) == ("Gongbu", "osm")
+
+    def test_pinyin_fallback_for_chinese(self):
+        pytest.importorskip("pypinyin")
+        from glews.dashboard import _english_name
+        assert _english_name({"name": "帮锦"}) == ("Bangjin", "romanized")
+
+    def test_iast_fallback_drops_final_schwa(self):
+        pytest.importorskip("indic_transliteration")
+        from glews.dashboard import _romanize
+        assert _romanize("सिङ्ग्दुम") == "Siṅgdum"
+
+    def test_latin_name_not_romanized(self):
+        from glews.dashboard import _english_name
+        assert _english_name({"name": "Syabrubesi"}) == ("", "")
+
+    def test_cached_entry_without_english_is_romanized(self):
+        pytest.importorskip("pypinyin")
+        from glews.dashboard import _apply_place_name
+        f = {}
+        _apply_place_name(f, {"name": "热匈", "name_en": ""})
+        assert f == {"place_name": "热匈", "place_name_en": "Rexiong",
+                     "place_name_en_source": "romanized"}
+
+
+def test_exposure_unnamed_place_has_no_type_as_name(monkeypatch):
+    import glews.dashboard as d
+
+    elements = [
+        {"lat": 28.20, "lon": 85.40, "tags": {"place": "hamlet"}},
+        {"lat": 28.21, "lon": 85.41, "tags": {"place": "village", "name": "Syabrubesi"}},
+    ]
+    monkeypatch.setattr(d, "_fetch_json", lambda *a, **k: {"elements": elements})
+    feats = d._get_exposure(28.2, 85.4)["features"]
+    by_type = {f["type"]: f for f in feats}
+    assert by_type["hamlet"]["name"] == ""
+    assert by_type["village"]["name"] == "Syabrubesi"
+
+
+class TestWebcams:
+    SAMPLE = {"total": 1, "webcams": [{
+        "webcamId": 123, "title": "Kyanjin Gompa", "status": "active",
+        "lastUpdatedOn": "2026-10-18T06:00:00.000Z",
+        "location": {"latitude": 28.21, "longitude": 85.56, "city": "Kyanjin"},
+        "images": {"current": {"preview": "https://img/123?token=t"}},
+        "urls": {"detail": "https://www.windy.com/webcams/123"},
+    }]}
+
+    def test_not_configured_without_key(self, monkeypatch):
+        import glews.dashboard as d
+        monkeypatch.delenv(d.WINDY_KEY_ENV, raising=False)
+        assert d._get_webcams(28.29, 85.52) == {"configured": False, "webcams": []}
+
+    def test_key_sent_as_header_and_results_parsed(self, monkeypatch):
+        import glews.dashboard as d
+        calls = []
+
+        def fake(url, **kw):
+            calls.append((url, kw.get("headers")))
+            return self.SAMPLE
+        monkeypatch.setenv(d.WINDY_KEY_ENV, "k123")
+        monkeypatch.setattr(d, "_fetch_json", fake)
+        out = d._get_webcams(28.29, 85.52)
+        assert calls[0][1] == {"x-windy-api-key": "k123"}
+        assert "k123" not in calls[0][0]                      # never in the URL
+        assert "nearby=28.2900%2C85.5200%2C50" in calls[0][0]
+        cam = out["webcams"][0]
+        assert out["radius_km"] == 50 and cam["title"] == "Kyanjin Gompa"
+        assert cam["image"] == "https://img/123?token=t" and cam["distance_km"] > 0
+
+    def test_widens_radius_when_none_nearby(self, monkeypatch):
+        import glews.dashboard as d
+        radii = []
+
+        def fake(url, **kw):
+            radii.append(url.split("%2C")[2].split("&")[0])
+            return {"webcams": []} if len(radii) == 1 else self.SAMPLE
+        monkeypatch.setenv(d.WINDY_KEY_ENV, "k")
+        monkeypatch.setattr(d, "_fetch_json", fake)
+        assert d._get_webcams(28.29, 85.52)["radius_km"] == 150
+        assert radii == ["50", "150"]
+
+    def test_rejected_key_reported(self, monkeypatch):
+        import urllib.error
+        import glews.dashboard as d
+
+        def fake(url, **kw):
+            raise urllib.error.HTTPError(url, 403, "Forbidden", {}, None)
+        monkeypatch.setenv(d.WINDY_KEY_ENV, "bad")
+        monkeypatch.setattr(d, "_fetch_json", fake)
+        out = d._get_webcams(28.29, 85.52)
+        assert "rejected" in out["error"] and out["webcams"] == []
+
+
+class TestCuratedWebcams:
+    REG = [{"id": "pheriche", "name": "Pheriche", "lat": 27.895, "lon": 86.819,
+            "elevation_m": 4371, "youtube_video_id": "vid1", "provider_name": "WebCam Nepal",
+            "provider_url": "https://webcamnepal.com", "faces": "Imja valley"}]
+
+    def test_registry_file_loads_and_skips_bad_entries(self, tmp_path):
+        from glews.dashboard import load_webcam_registry
+        p = tmp_path / "w.yaml"
+        p.write_text("providers:\n  x: {name: X, url: 'https://x'}\n"
+                     "webcams:\n  - {id: a, provider: x, name: A, lat: 1, lon: 2, youtube_video_id: v}\n"
+                     "  - {id: b, provider: x, name: B, lat: 1}\n")
+        reg = load_webcam_registry(p)
+        assert [w["id"] for w in reg] == ["a"] and reg[0]["provider_name"] == "X"
+        assert load_webcam_registry(tmp_path / "missing.yaml") == []
+
+    def test_shipped_registry_is_valid(self):
+        from glews.dashboard import load_webcam_registry
+        reg = load_webcam_registry()
+        assert len(reg) >= 10
+        assert all(26 < w["lat"] < 31 and 80 < w["lon"] < 89 for w in reg)   # all in Nepal
+
+    def test_curated_only_without_windy_key(self, monkeypatch):
+        import glews.dashboard as d
+        monkeypatch.delenv(d.WINDY_KEY_ENV, raising=False)
+        monkeypatch.delenv(d.YOUTUBE_KEY_ENV, raising=False)
+        out = d._get_webcams(27.90, 86.93, tuple(self.REG))      # Imja Tsho, ~11 km
+        cam = out["webcams"][0]
+        assert out["configured"] and out["radius_km"] == 50
+        assert cam["url"] == "https://www.youtube.com/watch?v=vid1"
+        assert cam["image"] == "https://i.ytimg.com/vi/vid1/hqdefault_live.jpg"
+        assert cam["status"] == "unknown" and cam["faces"] == "Imja valley"
+
+    def test_youtube_status_uses_header_key(self, monkeypatch):
+        import glews.dashboard as d
+        seen = {}
+
+        def fake(url, **kw):
+            seen["url"], seen["headers"] = url, kw.get("headers")
+            return {"items": [{"id": "a", "snippet": {"liveBroadcastContent": "live"}},
+                              {"id": "b", "snippet": {"liveBroadcastContent": "none"}}]}
+        monkeypatch.setenv(d.YOUTUBE_KEY_ENV, "yt")
+        monkeypatch.setattr(d, "_fetch_json", fake)
+        assert d._youtube_live_status(["a", "b", "c"]) == {"a": "live", "b": "ended", "c": "unavailable"}
+        assert seen["headers"] == {"X-Goog-Api-Key": "yt"} and "yt" not in seen["url"]
+
+
+def test_distant_webcams_one_per_site(monkeypatch):
+    import glews.dashboard as d
+    monkeypatch.delenv(d.WINDY_KEY_ENV, raising=False)
+    monkeypatch.delenv(d.YOUTUBE_KEY_ENV, raising=False)
+    reg = tuple({"id": f"c{i}", "name": f"C{i}", "lat": 27.8156, "lon": 86.7230,
+                 "youtube_video_id": f"v{i}"} for i in range(3))
+    near = d._get_webcams(27.82, 86.72, reg)
+    far = d._get_webcams(28.29, 85.52, reg)          # ~128 km away
+    assert len(near["webcams"]) == 3 and len(far["webcams"]) == 1

@@ -385,6 +385,8 @@ Tier 2 review interface - a single-page web dashboard using Python's built-in `h
   - A news feed that mixes academic and media sources
 - **Response protocol:** inside the Analyst Classification panel, for flags with a Voight fit. It drafts an authority notification or an evacuation advisory, with Copy and Close controls.
 - **Synthetic-data banner:** shown when `flags.geojson` is tagged `data_source: synthetic`. The known source is not drawn for synthetic data.
+- **Webcams:** cameras within 50 km of the flag (else 150 km, one per site) from the curated list in `config/webcams.yaml` (currently 17 WebCam Nepal mountain streams) and, if `GLEWS_WINDY_API_KEY` is set, from the Windy Webcams API. Keys are read from the environment and used server-side only. Set `GLEWS_YOUTUBE_API_KEY` (YouTube Data API v3) to show whether each stream is live.
+- **Place names:** English names come from OpenStreetMap where available; otherwise Chinese names are romanized to pinyin and Nepali names transliterated (`pip install -e ".[names]"`), shown in italics and marked as romanized. Unnamed settlements in Downstream Exposure are labelled "Unnamed hamlet" etc.
 - **Fast start:** place names are looked up from OpenStreetMap in the background and cached in `place_names.json`, so the page is served immediately and fills them in when they arrive.
 - **Themes:** light, dark, and system.
 

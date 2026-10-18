@@ -1,0 +1,159 @@
+# GLEWS curated webcam registry
+#
+# Webcams shown on the dashboard's Webcams panel alongside Windy's
+# listings. Each entry is a public camera stream; GLEWS shows a thumbnail
+# and links to the stream — it does not re-host or embed the video.
+#
+# Coordinates are approximate (village / lodge level, ±1 km) unless
+# `coord_precision` says otherwise. `faces` is taken from the stream title
+# and has NOT been verified against the view; check by eye before relying
+# on a camera for a specific slope or lake.
+#
+# YouTube live-stream video IDs change when a stream is restarted. Update
+# them from the provider's site, or set GLEWS_YOUTUBE_API_KEY so the
+# dashboard can report whether each stream is currently live.
+#
+# Source: https://webcamnepal.com (camera list, 18 Oct 2026). Streams are
+# © WebCam Nepal; contact info@webcamnepal.com about reuse or partnership.
+
+providers:
+  webcamnepal:
+    name: "WebCam Nepal"
+    url: "https://webcamnepal.com"
+    channel: "https://www.youtube.com/@WEBCAMNEPAL"
+
+webcams:
+  # --- Khumbu (Everest region) -------------------------------------------
+  - id: wcn-hev-panorama
+    provider: webcamnepal
+    name: "Hotel Everest View — Mount Everest panorama"
+    lat: 27.8156
+    lon: 86.7230
+    elevation_m: 3880
+    faces: "Everest panorama (north-east)"
+    youtube_video_id: "jqU7BWc1sos"
+  - id: wcn-hev-panoramic-audio
+    provider: webcamnepal
+    name: "Hotel Everest View — panoramic views"
+    lat: 27.8156
+    lon: 86.7230
+    elevation_m: 3880
+    faces: "Panoramic"
+    youtube_video_id: "SXsPeIqGJMA"
+  - id: wcn-hev-kongde
+    provider: webcamnepal
+    name: "Hotel Everest View — Kongde Ri"
+    lat: 27.8156
+    lon: 86.7230
+    elevation_m: 3880
+    faces: "Kongde Ri (6,187 m)"
+    youtube_video_id: "pD00R1lKhIs"
+  - id: wcn-hev-sky
+    provider: webcamnepal
+    name: "Hotel Everest View — sky view, day and night"
+    lat: 27.8156
+    lon: 86.7230
+    elevation_m: 3880
+    faces: "Sky"
+    youtube_video_id: "ME8IbaJ8O1w"
+  - id: wcn-thame
+    provider: webcamnepal
+    name: "Thame village"
+    lat: 27.8320
+    lon: 86.6510
+    elevation_m: 3800
+    faces: "Thame village"
+    youtube_video_id: "_9-drv-6Hjw"
+  - id: wcn-namche-norling
+    provider: webcamnepal
+    name: "Hotel Norling — Namche Bazaar"
+    lat: 27.8050
+    lon: 86.7130
+    elevation_m: 3440
+    youtube_video_id: "uQsntMlx8ZY"
+  - id: wcn-pheriche
+    provider: webcamnepal
+    name: "The Edelweiss — Pheriche"
+    lat: 27.8950
+    lon: 86.8190
+    elevation_m: 4371
+    youtube_video_id: "lHUky64A16Y"
+  - id: wcn-dingboche
+    provider: webcamnepal
+    name: "Hotel Tashi Delek — Dingboche"
+    lat: 27.8920
+    lon: 86.8310
+    elevation_m: 4360
+    youtube_video_id: "MOP1v1zd408"
+  - id: wcn-lobuche
+    provider: webcamnepal
+    name: "Lobuche"
+    lat: 27.9480
+    lon: 86.8100
+    elevation_m: 5050
+    youtube_video_id: "AFUTlak8wcA"
+  - id: wcn-lukla-buddha
+    provider: webcamnepal
+    name: "Buddha Lodge — Lukla"
+    lat: 27.6870
+    lon: 86.7310
+    elevation_m: 2860
+    youtube_video_id: "kaRVui_uXa8"
+  - id: wcn-lukla-airport
+    provider: webcamnepal
+    name: "Himalaya Lodge — Lukla airport"
+    lat: 27.6870
+    lon: 86.7300
+    elevation_m: 2860
+    faces: "Lukla airport"
+    youtube_video_id: "am9KDRSZQ-0"
+
+  # --- Mera Peak route (Hinku) -------------------------------------------
+  - id: wcn-mera-refuge
+    provider: webcamnepal
+    name: "Refuge Mera Lodge — Khare"
+    lat: 27.7330
+    lon: 86.8550
+    elevation_m: 5045
+    faces: "Mera Peak area"
+    youtube_video_id: "PyC60KTVQvk"
+  - id: wcn-kote-lama
+    provider: webcamnepal
+    name: "Lama Lodge — Kote"
+    lat: 27.6965
+    lon: 86.8465
+    elevation_m: 3550
+    youtube_video_id: "Gmtq2YHjTQs"
+
+  # --- Annapurna, Mustang ------------------------------------------------
+  - id: wcn-abc
+    provider: webcamnepal
+    name: "Annapurna Base Camp"
+    lat: 28.5310
+    lon: 83.8780
+    elevation_m: 4130
+    faces: "Annapurna Sanctuary"
+    youtube_video_id: "6erj7ooA6CM"
+  - id: wcn-ghandruk-milan
+    provider: webcamnepal
+    name: "Hotel Milan — Ghandruk"
+    lat: 28.3760
+    lon: 83.8090
+    elevation_m: 1940
+    youtube_video_id: "DfcvfF_qoDU"
+  - id: wcn-jomsom-om
+    provider: webcamnepal
+    name: "Om's Home — Jomsom"
+    lat: 28.7806
+    lon: 83.7231
+    elevation_m: 2720
+    youtube_video_id: "vhpCErLQBgg"
+  # Kalopani Guest House, Lete: listed on webcamnepal.com but its video
+  # (5isFWPJarJw) returned 404 on 18 Oct 2026, so it is left out.
+  - id: wcn-muktinath-purang
+    provider: webcamnepal
+    name: "Hotel De Purang — Muktinath"
+    lat: 28.8167
+    lon: 83.8714
+    elevation_m: 3760
+    youtube_video_id: "vdw9G6r3fRg"

@@ -13,11 +13,16 @@ from utm import inv
 logging.basicConfig(level=logging.WARNING)
 cfg=yaml.safe_load(open(f"{ROOT}/config/nepal_2026.yaml"))
 min_coh=float(sys.argv[1]); out=sys.argv[2]
-ts=load_nisar_gunw_stack(f"{ROOT}/data/nisar/nepal_2026/gunw_t98_crop", min_coherence=min_coh, track=98)
+# Optional 3rd argument: stack directory (default: the 80 m GUNW crops)
+GUNW=sys.argv[3] if len(sys.argv)>3 else f"{ROOT}/data/nisar/nepal_2026/gunw_t98_crop"
+ts=load_nisar_gunw_stack(GUNW, min_coherence=min_coh, track=98)
 LAT,LON=inv(ts.longitude, ts.latitude)        # loader returns UTM x/y in these fields
 src=(LAT>=28.284)&(LAT<=28.293)&(LON>=85.519)&(LON<=85.530)
 d=np.hypot(LAT-28.288,(LON-85.524)*np.cos(np.radians(28.288)))*111.2
-ring=(d>2)&(d<5)&np.isfinite(ts.displacement[-1])
+half_km=(LAT.max()-LAT.min())*111.2/2
+R0,R1=(2,5) if half_km>5 else (1.5,2.8)        # stable ring must fit inside the crop
+POSTING=int(round(abs(float(ts.longitude[0,1]-ts.longitude[0,0]))))
+ring=(d>R0)&(d<R1)&np.isfinite(ts.displacement[-1])
 # Spatial reference: subtract stable-ring median at each date (sequential chain => equivalent to per-ifg referencing)
 ts.displacement -= np.nanmedian(ts.displacement[:, ring], axis=1)[:, None, None]
 valid=np.isfinite(ts.displacement[-1])
@@ -38,7 +43,7 @@ for f in sorted(flags, key=lambda f:-f.score)[:15]:
 def iso(d): return f"{d[:4]}-{d[4:6]}-{d[6:8]}"
 
 # Per-pair coherence and unwrapping reliability on the same grid (files sorted as the loader sorts them)
-GUNW=f"{ROOT}/data/nisar/nepal_2026/gunw_t98_crop"; B="science/LSAR/GUNW/grids/frequencyA/unwrappedInterferogram/HH"
+B="science/LSAR/GUNW/grids/frequencyA/unwrappedInterferogram/HH"
 coh_s, unrel_s, phase80, pair_dates = [], [], [], []
 for fp in sorted(Path(GUNW).glob("NISAR_*GUNW*.h5")):
     with h5py.File(fp) as h:
@@ -58,7 +63,7 @@ if out!="-" and flags:
         z=np.load(fp); X,Y=np.meshgrid(z["x"],z["y"]); la,lo=inv(X,Y); n=Path(fp).name.split("_")
         tiles20.append(dict(ref=iso(n[11]), sec=iso(n[13]), phase=np.angle(z["ifg"]), lat=la, lon=lo))
     tiles80=[dict(ref=r, sec=s_, phase=ph, lat=LAT, lon=LON) for (r,s_),ph in zip(pair_dates, phase80)]
-    near=[f for f in flags if tiles20 and np.hypot(f.center_lat-28.288,(f.center_lon-85.524)*0.88)*111.2 < 1.8]
+    near=[f for f in flags if tiles20 and (POSTING<=20 or np.hypot(f.center_lat-28.288,(f.center_lon-85.524)*0.88)*111.2 < 1.8)]
     far=[f for f in flags if f not in near]
     n_strips=render_interferogram_strips(near, tiles20, out)+render_interferogram_strips(far, tiles80, out)
     print(f"  interferogram strips: {n_strips} ({len(near)} at 20 m)")
@@ -71,8 +76,8 @@ if out!="-" and flags:
         "excluded": ["19 Aug-31 Aug pair (spans the collapse)", "duplicate product listings",
                      "track 48 (no Jan-Jun acquisitions)"],
         "coherence_mask": min_coh,
-        "reference": "median of a stable ring 2-5 km from the source, per date",
-        "posting_m": 80,
+        "reference": f"median of a stable ring {R0}-{R1} km from the source, per date",
+        "posting_m": POSTING,
         "extent": [float(LAT.min()), float(LON.min()), float(LAT.max()), float(LON.max())],
         "script": "scripts/nepal_2026/run_glews.py",
     }
