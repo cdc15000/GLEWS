@@ -1527,6 +1527,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .webcam-title { font-size: 12.5px; font-weight: 600; padding: 6px 8px 0; color: var(--text-primary); }
 .webcam-meta { font-size: 11.5px; color: var(--text-secondary); padding: 2px 8px 8px; }
 .webcam-provider { padding-top: 0; font-size: 11px; opacity: 0.85; }
+.webcam-toggle { margin-top: 8px; padding: 5px 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-card); color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; }
+.webcam-toggle:hover, .webcam-toggle:focus-visible { border-color: var(--accent); outline: none; }
 .webcam-credit { font-size: 11px; color: var(--text-secondary); margin-top: 8px; }
 .webcam-credit a { color: var(--accent); }
 
@@ -2522,7 +2524,17 @@ function renderWebcamsPanel(data, el) {
         return;
     }
     var statusLabel = {live: 'Live', upcoming: 'Scheduled', ended: 'Stream ended', unavailable: 'Stream removed', unknown: 'Live status unknown'};
-    var html = err + '<div class="webcam-grid">';
+    var regional = data.radius_km > 50;
+    var html = err;
+    if (regional) {
+        var nearest = cams[0].distance_km;
+        html += '<div class="panel-empty">No webcams near this flag. The nearest is ' + nearest.toFixed(0) + ' km away.</div>';
+        html += '<button class="webcam-toggle" aria-expanded="' + (webcamsRegionalOpen ? 'true' : 'false') + '" onclick="toggleRegionalWebcams()">' +
+                (webcamsRegionalOpen ? 'Hide' : 'Show') + ' ' + cams.length + ' regional camera' + (cams.length === 1 ? '' : 's') + '</button>';
+        html += '<div id="regionalWebcams"' + (webcamsRegionalOpen ? '' : ' hidden') + '>';
+        html += '<div class="webcam-meta" style="margin:8px 0;">These cameras are ' + nearest.toFixed(0) + '–' + cams[cams.length - 1].distance_km.toFixed(0) + ' km away and face other valleys. They show regional weather and snow cover, not the flagged slope.</div>';
+    }
+    html += '<div class="webcam-grid">';
     for (var i = 0; i < cams.length; i++) {
         var c = cams[i];
         var img = c.image || c.image_daylight;
@@ -2540,8 +2552,17 @@ function renderWebcamsPanel(data, el) {
         html += '</a>';
     }
     html += '</div>';
-    if (data.radius_km > 50) html += '<div class="webcam-meta" style="margin-top:6px;">None within 50 km; showing the nearest within ' + data.radius_km + ' km. Distant cameras show regional weather and snow cover, not the flagged slope.</div>';
+    if (regional) html += '</div>';
     el.innerHTML = html + credit;
+    lastWebcamData = data;
+}
+// Regional cameras stay collapsed unless the analyst opens them; the choice
+// carries over as they move between flags.
+var webcamsRegionalOpen = false, lastWebcamData = null;
+function toggleRegionalWebcams() {
+    webcamsRegionalOpen = !webcamsRegionalOpen;
+    var el = document.getElementById('panel-webcams');
+    if (el && lastWebcamData) renderWebcamsPanel(lastWebcamData, el);
 }
 
 function renderFieldReportsPanel(data, el) {
