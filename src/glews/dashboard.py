@@ -571,8 +571,82 @@ def load_webcam_registry(path: str | Path | None = None) -> list[dict]:
             continue
         prov = providers.get(w.get("provider"), {})
         cams.append({**w, "provider_name": prov.get("name", w.get("provider", "")),
-                     "provider_url": prov.get("url", "")})
+                     "provider_url": prov.get("url", ""),
+                     "youtube_channel_id": prov.get("youtube_channel_id", "")})
     return cams
+
+
+# Channel scans cost ~1 quota unit per 50 uploads plus 1 per 50 videos
+# checked (~8 units for a 150-video channel), so hourly is ~200 units/day
+# of the 10,000 free. Failures are retried after 15 minutes.
+LIVE_SCAN_TTL_S = 3600
+LIVE_SCAN_RETRY_S = 900
+_live_scan_cache: dict[str, tuple[list[dict], float]] = {}
+_live_scan_lock = threading.Lock()
+
+
+def _youtube_get(path: str, key: str, **params) -> dict:
+    query = urllib.parse.urlencode(params)
+    return _fetch_json(f"https://www.googleapis.com/youtube/v3/{path}?{query}",
+                       headers={"X-Goog-Api-Key": key}, timeout=15)
+
+
+def _channel_live_streams(channel_id: str, key: str) -> list[dict]:
+    """Currently live videos on a channel, as [{"id", "title"}], cached hourly.
+
+    Scans the channel's uploads playlist rather than using search
+    (eventType=live), which costs 100 units and often misses long-running
+    streams.
+    """
+    now = time.time()
+    with _live_scan_lock:
+        hit = _live_scan_cache.get(channel_id)
+        if hit and now < hit[1]:
+            return hit[0]
+    try:
+        uploads = "UU" + channel_id[2:]
+        ids, token = [], None
+        for _ in range(10):                      # cap at 500 uploads
+            params = {"part": "contentDetails", "playlistId": uploads, "maxResults": 50}
+            if token:
+                params["pageToken"] = token
+            page = _youtube_get("playlistItems", key, **params)
+            ids += [i["contentDetails"]["videoId"] for i in page.get("items", [])]
+            token = page.get("nextPageToken")
+            if not token:
+                break
+        live = []
+        for k in range(0, len(ids), 50):
+            vids = _youtube_get("videos", key, part="snippet", id=",".join(ids[k:k + 50]))
+            live += [{"id": v["id"], "title": v["snippet"].get("title", "")}
+                     for v in vids.get("items", [])
+                     if v.get("snippet", {}).get("liveBroadcastContent") == "live"]
+        expires = now + LIVE_SCAN_TTL_S
+    except Exception as exc:
+        logger.info("YouTube channel scan failed for %s: %s", channel_id, exc)
+        live, expires = [], now + LIVE_SCAN_RETRY_S
+    with _live_scan_lock:
+        _live_scan_cache[channel_id] = (live, expires)
+    return live
+
+
+def _resolve_live_video_ids(registry: list[dict]) -> dict[str, str]:
+    """Map camera id -> current live video id, matched by title keywords."""
+    key = os.environ.get(YOUTUBE_KEY_ENV, "").strip()
+    if not key:
+        return {}
+    resolved = {}
+    for channel in {w["youtube_channel_id"] for w in registry if w.get("youtube_channel_id")}:
+        live = _channel_live_streams(channel, key)
+        for w in registry:
+            words = [m.upper() for m in w.get("match") or []]
+            if w.get("youtube_channel_id") != channel or not words:
+                continue
+            for v in live:
+                if all(word in v["title"].upper() for word in words):
+                    resolved[w.get("id")] = v["id"]
+                    break
+    return resolved
 
 
 def _youtube_live_status(video_ids: list[str]) -> dict[str, str]:
@@ -597,16 +671,18 @@ def _youtube_live_status(video_ids: list[str]) -> dict[str, str]:
             if vid in found else "unavailable" for vid in video_ids}
 
 
-def _curated_webcams(lat: float, lon: float, registry: list[dict], radius_km: float) -> list[dict]:
+def _curated_webcams(lat: float, lon: float, registry: list[dict], radius_km: float,
+                     live_ids: dict[str, str] | None = None) -> list[dict]:
+    live_ids = live_ids or {}
     out = []
     for w in registry:
         d = _haversine(lat, lon, w["lat"], w["lon"])
         if d > radius_km:
             continue
-        vid = w["youtube_video_id"]
+        vid = live_ids.get(w.get("id"), w["youtube_video_id"])
         out.append({
             "id": w.get("id", vid), "title": w.get("name", "Webcam"),
-            "status": None, "city": "", "lat": w["lat"], "lon": w["lon"],
+            "city": "", "lat": w["lat"], "lon": w["lon"],
             "distance_km": round(d, 1),
             # hqdefault_live.jpg is YouTube's thumbnail for a live stream
             "image": f"https://i.ytimg.com/vi/{vid}/hqdefault_live.jpg",
@@ -616,6 +692,8 @@ def _curated_webcams(lat: float, lon: float, registry: list[dict], radius_km: fl
             "provider": w.get("provider_name", ""), "provider_url": w.get("provider_url", ""),
             "approximate_location": w.get("coord_precision", "approximate") != "exact",
             "video_id": vid,
+            "status": "live" if w.get("id") in live_ids else None,
+            "stream_id_updated": vid != w["youtube_video_id"],
         })
     return out
 
@@ -665,8 +743,9 @@ def _get_webcams(lat: float, lon: float, registry: list[dict] | tuple = ()) -> d
     if not key and not registry:
         return {"configured": False, "webcams": []}
     windy_error = None
+    live_ids = _resolve_live_video_ids(list(registry)) if registry else {}
     for radius in WEBCAM_RADII_KM:
-        cams = _curated_webcams(lat, lon, list(registry), radius)
+        cams = _curated_webcams(lat, lon, list(registry), radius, live_ids)
         if key and windy_error is None:
             try:
                 cams += _windy_webcams(lat, lon, radius, key)
@@ -676,9 +755,10 @@ def _get_webcams(lat: float, lon: float, registry: list[dict] | tuple = ()) -> d
                 windy_error = (f"Windy rejected the API key (HTTP {exc.code}). "
                                f"Check {WINDY_KEY_ENV} and that the key is for the Webcams API.")
         if cams:
-            status = _youtube_live_status([c["video_id"] for c in cams if c.get("video_id")])
+            pending = [c["video_id"] for c in cams if c.get("video_id") and not c.get("status")]
+            status = _youtube_live_status(pending)
             for c in cams:
-                if c.get("video_id"):
+                if c.get("video_id") and not c.get("status"):
                     c["status"] = status.get(c["video_id"], "unknown")
             cams.sort(key=lambda c: c["distance_km"])
             if radius > WEBCAM_RADII_KM[0]:
@@ -2453,6 +2533,7 @@ function renderWebcamsPanel(data, el) {
         var meta = [c.distance_km.toFixed(1) + ' km away'];
         if (c.elevation_m) meta.push(c.elevation_m.toLocaleString() + ' m');
         if (c.status && c.status !== 'active') meta.push(statusLabel[c.status] || escapeHtml(c.status));
+        if (c.stream_id_updated) meta.push('<span title="The stream restarted under a new YouTube ID; GLEWS found it from the channel">new stream ID</span>');
         html += '<div class="webcam-meta">' + meta.join(' · ') + '</div>';
         if (c.faces) html += '<div class="webcam-meta">Faces: ' + escapeHtml(c.faces) + ' <span title="Taken from the stream title; not checked against the view">(unverified)</span></div>';
         html += '<div class="webcam-meta webcam-provider">' + escapeHtml(c.provider || '') + (c.approximate_location ? ' · location approximate' : '') + '</div>';

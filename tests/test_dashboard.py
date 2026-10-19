@@ -736,3 +736,73 @@ def test_distant_webcams_one_per_site(monkeypatch):
     near = d._get_webcams(27.82, 86.72, reg)
     far = d._get_webcams(28.29, 85.52, reg)          # ~128 km away
     assert len(near["webcams"]) == 3 and len(far["webcams"]) == 1
+
+
+class TestLiveStreamResolution:
+    REG = [
+        {"id": "pano", "name": "Panorama", "lat": 27.8156, "lon": 86.7230, "youtube_video_id": "old",
+         "match": ["EVEREST PANORAMA"], "youtube_channel_id": "UCabc"},
+        {"id": "ding", "name": "Dingboche", "lat": 27.892, "lon": 86.831, "youtube_video_id": "d1",
+         "match": ["DINGBOCHE"], "youtube_channel_id": "UCabc"},
+    ]
+
+    @pytest.fixture(autouse=True)
+    def _clean(self, monkeypatch):
+        import glews.dashboard as d
+        d._live_scan_cache.clear()
+        monkeypatch.setenv(d.YOUTUBE_KEY_ENV, "yt")
+        monkeypatch.delenv(d.WINDY_KEY_ENV, raising=False)
+        yield
+        d._live_scan_cache.clear()
+
+    def _fake(self, calls, fail=False):
+        def fake(url, **kw):
+            calls.append(url)
+            if fail:
+                raise OSError("down")
+            if "/playlistItems?" in url:
+                assert "playlistId=UUabc" in url
+                return {"items": [{"contentDetails": {"videoId": v}} for v in ("new", "d1", "x")]}
+            if "/videos?" in url and "id=new" in url:
+                return {"items": [
+                    {"id": "new", "snippet": {"title": "WEBCAM NEPAL LIVE: MOUNT EVEREST PANORAMA", "liveBroadcastContent": "live"}},
+                    {"id": "d1", "snippet": {"title": "Dingboche", "liveBroadcastContent": "none"}},
+                    {"id": "x", "snippet": {"title": "London pond", "liveBroadcastContent": "live"}}]}
+            if "/videos?" in url:          # status lookup for unresolved cams
+                return {"items": [{"id": "d1", "snippet": {"liveBroadcastContent": "none"}}]}
+            raise AssertionError(url)
+        return fake
+
+    def test_restarted_stream_resolved_by_title(self, monkeypatch):
+        import glews.dashboard as d
+        calls = []
+        monkeypatch.setattr(d, "_fetch_json", self._fake(calls))
+        cams = {c["id"]: c for c in d._get_webcams(27.85, 86.78, tuple(self.REG))["webcams"]}
+        assert cams["pano"]["video_id"] == "new" and cams["pano"]["status"] == "live"
+        assert cams["pano"]["stream_id_updated"] is True
+        assert cams["pano"]["url"].endswith("v=new")
+        assert cams["ding"]["video_id"] == "d1" and cams["ding"]["status"] == "ended"
+
+    def test_scan_cached_for_an_hour(self, monkeypatch):
+        import glews.dashboard as d
+        calls = []
+        monkeypatch.setattr(d, "_fetch_json", self._fake(calls))
+        d._resolve_live_video_ids(self.REG)
+        n = len(calls)
+        assert d._resolve_live_video_ids(self.REG) == {"pano": "new"}
+        assert len(calls) == n                          # second call served from cache
+
+    def test_scan_failure_backs_off_and_falls_back(self, monkeypatch):
+        import glews.dashboard as d
+        calls = []
+        monkeypatch.setattr(d, "_fetch_json", self._fake(calls, fail=True))
+        assert d._resolve_live_video_ids(self.REG) == {}
+        assert len(calls) == 1
+        assert d._resolve_live_video_ids(self.REG) == {}
+        assert len(calls) == 1                          # no retry within the backoff window
+
+    def test_no_key_no_scan(self, monkeypatch):
+        import glews.dashboard as d
+        monkeypatch.delenv(d.YOUTUBE_KEY_ENV)
+        monkeypatch.setattr(d, "_fetch_json", lambda *a, **k: pytest.fail("network call"))
+        assert d._resolve_live_video_ids(self.REG) == {}
