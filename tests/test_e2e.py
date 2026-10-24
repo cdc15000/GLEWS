@@ -324,7 +324,9 @@ class TestValidateAllConfigs:
         config_dir = Path(__file__).parent.parent / "config"
         assert config_dir.is_dir(), f"Config directory not found: {config_dir}"
 
-        yaml_files = sorted(config_dir.glob("*.yaml"))
+        # Registries that are not site configs
+        not_sites = {"webcams.yaml"}
+        yaml_files = sorted(f for f in config_dir.glob("*.yaml") if f.name not in not_sites)
         assert len(yaml_files) >= 1, "No YAML config files found"
 
         for config_file in yaml_files:

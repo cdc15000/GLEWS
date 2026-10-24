@@ -24,7 +24,7 @@ Retrospective and synthetic validation against four glacier/rock-slope collapse 
 
 | Event | Type | Lead Time | Key Metric | Data Source |
 |-------|------|-----------|------------|-------------|
-| **Gyirong–Rasuwa (Nepal–Tibet) 2026** | Real event (26 Aug 2026) | **Not detected** at source\* | Failed slope unreliably unwrapped; ≈ −5 cm measured vs ~30 cm reported | NISAR GUNW L-band |
+| **Gyirong–Rasuwa (Nepal–Tibet) 2026** | Real event (26 Aug 2026) | **Not detected** at source\* | Radar offsets show 0.64 m in the final pre-event pair, but no more than in spring; phase and Sentinel-2 show no precursor | NISAR GUNW + GOFF L-band, Sentinel-2 |
 | **Weisshorn (Randa), Switzerland** | Real event | N/A | **81 mm** cumulative displacement detected | Sentinel-1 C-band |
 | **Chamoli, India (Feb 2021)** | Synthetic reconstruction | **~30 days** | Pre-collapse acceleration detected via z-score | Synthetic (modeled on real event parameters) |
 | **Aru Glaciers, Tibet (Jul 2016)** | Synthetic reconstruction | **39-54 days** | Dual-glacier collapse precursor signals | Synthetic (modeled on real event parameters) |
@@ -55,12 +55,29 @@ The October 2026 re-analysis targeted the source itself, located from the axes o
 - **The 20 m wrapped phase shows a patch over the slope in mid-July**, but similar patterns appear in winter, so it is unconfirmed.
 - Sentinel-1, the source of ICIMOD's 40 cm figure, has not been processed yet.
 
+These bullets use the loader as it was before Phase 1. **Phase 1** (Oct 2026)
+fixed the loader and added radar offset tracking and Sentinel-2 optical
+offset tracking, judged against criteria written down before the runs
+([docs/acceptance_phase1.md](docs/acceptance_phase1.md)):
+
+- With unreliable unwrapping masked per pair, **no source pixel survives**:
+  GUNW phase cannot measure this slope.
+- **NISAR GOFF offsets pass** the pre-registered test: +0.64 m slant
+  range over the source in 26 Jul–19 Aug (6.8 σ). But spring 2026 pairs
+  show equal or larger rates, and the slope faces away from the radar, so
+  this is not yet evidence of a late-summer acceleration.
+- **Sentinel-2 offsets fail.** Inside the post-event scar, which
+  confirms ICIMOD's outline, motion is ≤ 3 m/yr in every year from 2018
+  to 2026. An injection test shows 12 m/yr would have been seen, so Wang
+  et al.'s > 100 m is not reproduced inside the scar. The glacier
+  south-east of it moves > 20 m/yr.
+
 Details and scripts: [docs/validation.md](docs/validation.md#re-analysis-over-the-source-nisar-gunw-october-2026), [`scripts/nepal_2026/`](scripts/nepal_2026/).
 
 **Design implications:**
 
 - A precursor of about 8 mm/day (roughly 10 cm per 12-day Sentinel-1 pair) is at the limit of C-band phase unwrapping. This is why GLEWS includes NISAR L-band and GOFF offset tracking (`nisar.py`).
-- An 80 m grid is too coarse for a ~1 km steep source. The NISAR loader also needs to honour the `connectedComponents` reliability layer and reference displacement to stable ground; neither is done yet.
+- An 80 m grid is too coarse for a ~1 km steep source. The NISAR loader now honours the `connectedComponents` reliability layer and references each pair to stable ground (Phase 1).
 - The source glacier moved about 29 m/yr from 2014 to 2024 without accelerating. ICIMOD reads the pre-failure signal as bedrock failure, with the ice playing a passive role. Scoring each pixel against its own baseline, rather than flagging absolute velocity, is what keeps a fast glacier from swamping the detector.
 - ICIMOD lists atmospheric or geometric artefacts among the possible explanations for the pre-event signal. That argues for running the Tier 1 cross-check filters on real data.
 

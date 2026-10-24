@@ -1,5 +1,5 @@
 """Re-run GLEWS Tier 0 over the Langtang Lirung source using NISAR track-98 GUNW crops."""
-import sys, json, logging, yaml, numpy as np
+import os, sys, json, logging, yaml, numpy as np
 from pathlib import Path
 ROOT=str(Path(__file__).resolve().parents[2])
 sys.path.insert(0, ROOT+"/src")
@@ -15,18 +15,23 @@ cfg=yaml.safe_load(open(f"{ROOT}/config/nepal_2026.yaml"))
 min_coh=float(sys.argv[1]); out=sys.argv[2]
 # Optional 3rd argument: stack directory (default: the 80 m GUNW crops)
 GUNW=sys.argv[3] if len(sys.argv)>3 else f"{ROOT}/data/nisar/nepal_2026/gunw_t98_crop"
-ts=load_nisar_gunw_stack(GUNW, min_coherence=min_coh, track=98)
-LAT,LON=inv(ts.longitude, ts.latitude)        # loader returns UTM x/y in these fields
+# Grid of the first product, to build the stable reference ring before loading
+B0="science/LSAR/GUNW/grids/frequencyA/unwrappedInterferogram/HH"
+with h5py.File(sorted(Path(GUNW).glob("NISAR_*GUNW*.h5"))[0]) as h0:
+    X0,Y0=np.meshgrid(h0[B0+"/xCoordinates"][:], h0[B0+"/yCoordinates"][:])
+LAT,LON=inv(X0,Y0)
 src=(LAT>=28.284)&(LAT<=28.293)&(LON>=85.519)&(LON<=85.530)
 d=np.hypot(LAT-28.288,(LON-85.524)*np.cos(np.radians(28.288)))*111.2
 half_km=(LAT.max()-LAT.min())*111.2/2
 R0,R1=(2,5) if half_km>5 else (1.5,2.8)        # stable ring must fit inside the crop
-POSTING=int(round(abs(float(ts.longitude[0,1]-ts.longitude[0,0]))))
-ring=(d>R0)&(d<R1)&np.isfinite(ts.displacement[-1])
-# Spatial reference: subtract stable-ring median at each date (sequential chain => equivalent to per-ifg referencing)
-ts.displacement -= np.nanmedian(ts.displacement[:, ring], axis=1)[:, None, None]
+POSTING=int(round(abs(float(X0[0,1]-X0[0,0]))))
+ring=(d>R0)&(d<R1)
+# Each pair is referenced to the ring median within its connected component;
+# pixels with unreliable unwrapping (connectedComponents 0) are dropped per pair.
+GAP=os.environ.get("GLEWS_GAP_POLICY","break")
+ts=load_nisar_gunw_stack(GUNW, min_coherence=min_coh, track=98, reference_mask=ring, gap_policy=GAP)
 valid=np.isfinite(ts.displacement[-1])
-print(f"min_coh={min_coh}: {len(ts.date_strings)} dates {ts.date_strings[0]}..{ts.date_strings[-1]}; valid px {valid.sum()}/{valid.size}; source px valid {(valid&src).sum()}/{src.sum()}; ring px {ring.sum()}")
+print(f"min_coh={min_coh} gaps={GAP} missing-interval fraction={ts.metadata['missing_interval_fraction']:.0%}: {len(ts.date_strings)} dates {ts.date_strings[0]}..{ts.date_strings[-1]}; valid px {valid.sum()}/{valid.size}; source px valid {(valid&src).sum()}/{src.sum()}; ring px {ring.sum()}")
 if (valid&src).any():
     cs=np.nanmedian(ts.displacement[:, valid&src], axis=1)*100
     print("  source median cumulative LOS (cm):", " ".join(f"{v:.1f}" for v in cs))
@@ -76,7 +81,9 @@ if out!="-" and flags:
         "excluded": ["19 Aug-31 Aug pair (spans the collapse)", "duplicate product listings",
                      "track 48 (no Jan-Jun acquisitions)"],
         "coherence_mask": min_coh,
-        "reference": f"median of a stable ring {R0}-{R1} km from the source, per date",
+        "reference": f"per pair: median of a stable ring {R0}-{R1} km from the source, within its connected component",
+        "unwrapping_mask": "connectedComponents 0 dropped per pair",
+        "gap_policy": GAP,
         "posting_m": POSTING,
         "extent": [float(LAT.min()), float(LON.min()), float(LAT.max()), float(LON.max())],
         "script": "scripts/nepal_2026/run_glews.py",

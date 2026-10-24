@@ -8,7 +8,7 @@ Validation of GLEWS detection algorithms against four glacier and rock-slope col
 
 | Event | Location | Date | Type | Lead Time | Key Detection Metric | Data Source |
 |-------|----------|------|------|-----------|---------------------|-------------|
-| Gyirong–Rasuwa (Nepal–Tibet) | Source 28.288°N, 85.524°E (ICIMOD Fig. 9) | 26 Aug 2026 | Real | **Not detected** at source | Failed slope unreliably unwrapped; ≈ −5 cm vs ICIMOD ~30 cm; 53 flags/144 km² | NISAR GUNW L-band (track 98) |
+| Gyirong–Rasuwa (Nepal–Tibet) | Source 28.288°N, 85.524°E (ICIMOD Fig. 9) | 26 Aug 2026 | Real | **Not detected** at source | GOFF offsets: 0.64 m in the final pre-event pair (6.8 σ) but no larger than spring 2026; GUNW phase blind over the source; Sentinel-2 offsets: ≤ 3 m/yr, no precursor | NISAR GUNW + GOFF L-band (track 98), Sentinel-2 |
 | Weisshorn (Randa) | 46.1°N, 7.8°E | Ongoing slow deformation | Real | N/A | **81 mm** cumulative displacement | Sentinel-1 C-band |
 | Chamoli | 30.4°N, 79.7°E | 7 Feb 2021 | Synthetic | **~30 days** | Acceleration z-score > 3 sigma | Synthetic |
 | Aru Glaciers | 34.0°N, 82.2°E | 17 Jul 2016 | Synthetic | **39–54 days** | Dual-glacier precursor signal | Synthetic |
@@ -112,12 +112,53 @@ Sensitivity: lowering the mask to 0.2 gives 66 flags, and to 0.1 gives 78. At 0.
    - It applies the coherence mask to stack-mean coherence, which snow-season pairs drag down.
 4. **False-positive rate.** 53 flags in 144 km² of high-mountain terrain is far too many for analyst review. Tier 1 cross-checks and season-aware coherence handling are needed before alerts are meaningful.
 
+The table and findings above use the loader as it was before Phase 1
+(findings 3 lists its gaps). Phase 1 fixed them; see below.
+
+### Phase 1: fixed loader, radar offsets and Sentinel-2 (October 2026)
+
+Full criteria, every setting tried, and figures:
+[docs/acceptance_phase1.md](acceptance_phase1.md). Pass/fail criteria were
+written before the runs; anything changed afterwards is labelled post hoc.
+
+- **GUNW with the fixed loader** (per-pair connected-component masking,
+  per-pair referencing within the component, no zero-motion gap filling):
+  the source is in unreliable components in 73–100 % of pixels in every
+  pair, so no source pixel survives. Phase interferometry at 80 m cannot
+  measure this slope.
+- **GOFF offset tracking (A1, pass):** 26 Jul → 19 Aug, slant range
+  +0.64 m (6.8 σ, above 99.8 % of random patches), along-track +0.34 m.
+  Inverted assuming motion parallel to the slope: about 0.6 m horizontal
+  toward 289° in 24 days. But four spring 2026 pairs show equal or larger
+  per-day offsets, the source's offset is positive in every pair, and the
+  slope faces away from the radar (local incidence ≈ 73°). A1 shows motion
+  or bias above crop noise; it does not establish a late-summer
+  acceleration.
+- **Sentinel-2 offset tracking (A2/A3, fail):** 153 clear orbit-119
+  scenes, 2018–2026. A post-event scar mapped from 21 Oct 2025 vs
+  21 Oct 2026 imagery confirms the ICIMOD outline (84 % of the scar inside
+  it).
+  - Inside the scar, spring-to-spring rates are 0.5–3 m/yr in every year,
+    against noise of 3–6 m/yr.
+  - An injection test shows a steady 12 m/yr would have been recovered.
+    Wang et al.'s > 100 m (2017–2026) is therefore not reproduced inside
+    the scar.
+  - The glacier south-east of the scar moves > 20 m/yr.
+  - Winter shadow on the north face and monsoon cloud leave Sentinel-2 no
+    power to test a January 2026 onset.
+- **Cross-sensor check (A4):** not testable. No clear optical scene
+  between 15 June and 26 August.
+
 ### Next steps
 
-- Unwrap the 20 m wrapped crops with SNAPHU (or process NISAR GSLCs directly) so the ~1 km source spans enough pixels.
-- Process Sentinel-1 over 7 Jul–24 Aug, e.g. with ASF HyP3, to test against ICIMOD's 40 cm figure.
-- Try NISAR GOFF offset tracking over the same pairs.
-- Fix the loader gaps above, then re-run.
+- Find where Wang et al. (2026,
+  [doi:10.1007/s10346-026-02842-6](https://doi.org/10.1007/s10346-026-02842-6))
+  measured their > 100 m: the scar, or the glacier beside it.
+- Rank the GOFF source signal against patches of similar slope and
+  aspect, not random patches.
+- Sentinel-1 offset tracking 2017–2026. It sees through monsoon cloud and
+  winter shadow, so it can test summer-concentrated motion and a January
+  2026 onset.
 
 ### Limitations
 
