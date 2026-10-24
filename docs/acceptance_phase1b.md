@@ -60,4 +60,60 @@ places the source against matched terrain in each pair.
 
 ## Results
 
-*(added after the run)*
+*(added after the run, 24 Oct 2026; `scripts/nepal_2026/terrain_rank_goff.py`,
+`output/acceptance/B_terrain_rank.json`, `B_terrain_mask.png`)*
+
+### B1: insufficient controls (pre-registered verdict)
+
+The source is a 38.2° slope facing 278°. Terrain within ±7.5° and ±30° of
+that covers 1,112 of 22,324 pixels outside the source (5 %), scattered in
+small groups. Of 17,951 distinct translations of the source shape, **none**
+was ≥ 70 % terrain-like, so there are 0 matched controls. Only 41 % of the
+source's own pixels meet the definition. As specified, this is neither a
+pass nor a fail.
+
+### B2: not evaluable
+
+There are no matched controls in any pair.
+
+### POST HOC: terrain-like pixels away from the source (not pre-registered)
+
+Added because B1 had no controls. For each pair, this compares the
+source's median referenced offset with the median over all terrain-like
+pixels more than 1 km from the source (641–873 pixels per pair):
+
+| Pair | Source (m) | Terrain-like elsewhere (m) | Difference / σ | Source per 12 d (m) |
+|---|---|---|---|---|
+| 28 Nov – 28 Mar (10 pairs) | +0.01 to +0.15, all positive | −0.03 to +0.01 | 0.1–1.3 each; summed 0.70 m = 1.8 σ | 0.01–0.15 |
+| 28 Mar – 9 Apr | +0.434 | +0.050 | 1.7 | 0.43 |
+| 9 – 21 Apr | +0.183 | −0.015 | 0.7 | 0.18 |
+| 21 Apr – 3 May | +0.423 | −0.017 | 1.9 | 0.42 |
+| 3 – 15 May | +0.415 | −0.022 | 3.5 | 0.42 |
+| 15 – 27 May | +0.455 | −0.022 | 5.9 | 0.46 |
+| 27 May – 26 Jul (5 pairs) | +0.07 to +0.14 | −0.01 to +0.01 | 0.9–1.8 | 0.07–0.14 |
+| 26 Jul – 19 Aug (24 d) | +0.636 | −0.016 | 7.0 | 0.32 |
+
+Readings:
+
+1. **Not a geometry bias of the slope type.** Terrain with the same slope
+   and aspect, and therefore the same local incidence, shows a median
+   offset within ±0.05 m of zero in every pair. The source's positive
+   offset is specific to the source.
+2. **Persistent motion.** The source is positive in 21 of 21 pairs (sign
+   test p ≈ 5 × 10⁻⁷, treating pairs as independent). The cumulative slant
+   range is 3.75 m over 264 days, about 5.2 m/yr.
+3. **Two pulses, not one late-summer acceleration.** Per 12 days: winter
+   ~0.07 m, **late March to May ~0.4 m**, June–July ~0.1 m, **late July to
+   mid-August 0.32 m**. The spring pulse coincides with snowmelt onset. A
+   snow-related artefact cannot be excluded for spring, but the matched
+   terrain shows none.
+4. **Comparison with Sentinel-2.** 5.2 m/yr in slant range is about
+   5 m/yr horizontal under the slope-parallel assumption. The injection
+   test shows Sentinel-2 recovers 6 m/yr as only 3.5–4.5 m/yr, and the
+   measured 0.5–3 m/yr spring-to-spring rates partly average over the
+   pulses. The two sensors are roughly consistent at this level. Both
+   remain far below Wang et al.'s > 100 m since 2017.
+
+Caveats: the terrain-like pixels are scattered, not a contiguous patch of
+the source's size, so this is not the ranking B1 specified. Pairs share
+dates (sequential network), so they are not fully independent.

@@ -23,6 +23,7 @@ Crops land in `data/nisar/nepal_2026/` (gitignored).
 | `fetch_s2_crops.py [OUT_DIR] [ORBIT]` | Sentinel-2 L2A (collection 1) scene classification for every orbit-119 scene 2017–2026, then 10 m NIR crops for scenes with a clear source |
 | `fetch_s2_scar.py [OUT_DIR]` | Matched pre/post-event scenes (21 Oct 2025, 21 Oct 2026) for mapping the failure scar |
 | `acceptance_s2.py [S2_DIR]` | Pre-registered Sentinel-2 acceptance tests A2 and A3 |
+| `terrain_rank_goff.py [GOFF_DIR]` | Phase 1b: GOFF source signal against terrain of the same slope and aspect (`docs/acceptance_phase1b.md`) |
 | `injection_s2.py [S2_DIR]` | Injects 6 and 12 m/yr westward motion into the scar to check that the post-hoc re-test can see it |
 | `posthoc_s2.py [S2_DIR]` | Post-hoc Sentinel-2 re-test over the mapped scar (labelled post hoc; see the acceptance doc) |
 | `utm.py` | WGS84 UTM forward/inverse (no pyproj dependency) |
