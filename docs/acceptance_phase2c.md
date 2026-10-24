@@ -237,3 +237,64 @@ Reported without pass/fail:
   - that it can see summer-onset precursors.
 
 A second event processed blind remains necessary.
+
+## Results
+
+*(added after the run, 24 Oct 2026; `scripts/nepal_2026/phase2c_controls.py`,
+`output/acceptance/phase2c.json`)*
+
+**Coverage:** both sites have all 21 pairs, with a median valid share of
+0.70 against the 0.50 floor. No replacement was needed.
+
+| Site | E4 flags (per 100 km²) | E4 area | E2 | E2 + blunder rejection | Difficulty |
+|---|---|---|---|---|---|
+| Annapurna Sanctuary | **12** (8.3) | 0.83 km² | 72 | 91 | informative |
+| Langtang East | **4** (2.8) | 0.35 km² | 50 | 45 | informative |
+| Nepal (in-sample) | 0 | — | — | — | hit from 20 Feb, lead 187 d |
+
+### Verdict: **FAIL**
+
+Both controls exceed the limit of ≤ 2 flags: Annapurna Sanctuary has 12
+and Langtang East has 4.
+
+### Readings
+
+- **E4 cuts false alarms about 6–12× against E2 on unseen sites.** That
+  does not reach the limit; Annapurna Sanctuary is 4× over it.
+- **The false alarms are not a threshold-edge effect.**
+  - Sensitivity at the neighbouring settings: Annapurna Sanctuary 8–21,
+    Langtang East 3–5.
+  - No neighbouring setting passes.
+- **Pre-melt acceleration is not as rare as the development set
+  suggested.**
+  - Most control flags appear at the first cutoff (20 Feb), the same as
+    the Nepal hit.
+  - They are 6–22 pixels, as large as or larger than the Nepal hit
+    (7–19 pixels).
+- **Annapurna Sanctuary is at far range** (disclosed above), which may
+  inflate its count. Langtang East, at similar range to Nepal, still
+  fails.
+
+### Consequence
+
+On NISAR offsets from one season, no detector tried has met the
+operational false-alarm limit out of sample:
+
+- E1/E2 in Phase 2;
+- gated E2 in Phase 2b (in-sample);
+- E4 here.
+
+The precursor is **detectable** (lead 163–187 days), but not
+**specific**: comparable winter–spring accelerations occur on unrelated,
+glaciated, 144 km² crops.
+
+What has not been tried:
+
+- multi-year same-season baselines, which are needed to tell whether a
+  winter acceleration is unusual *for that pixel*;
+- restricting the watched area to failure-relevant terrain above
+  exposure.
+
+The 6–12× reduction means an E4-like screen could act as a **triage
+layer**, about 3–8 flags per 100 km² per season for analysts. That reading
+was not pre-registered and does not meet the stated limit.
