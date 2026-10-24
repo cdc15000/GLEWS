@@ -190,9 +190,17 @@ def read_goff_pairs(
     track: int | None = None,
     crop_to_site: tuple[float, float, float] | None = None,
     reference_mask: np.ndarray | None = None,
+    max_rate: float | None = None,
 ) -> list[dict]:
     """
     Read GOFF products as referenced, SNR-masked offset pairs.
+
+    ``max_rate`` (metres per day, off by default) masks offset blunders:
+    pixels whose referenced offset magnitude, hypot(range, along-track),
+    divided by the pair length exceeds it are set to NaN in both components
+    (``n_blunders`` counts them). Mismatched correlation windows give
+    implausible, sign-flipping offsets that survive the SNR mask
+    (docs/dev_phase2b.md).
 
     Returns one dict per pair, sorted by reference date, with ``ref_date``,
     ``sec_date``, ``days``, ``range_offset`` and ``along_track_offset``
@@ -236,6 +244,14 @@ def read_goff_pairs(
             d["range_offset"] = rg - r0
             d["along_track_offset"] = az - a0
             d["reference_offset"] = (r0, a0)
+        if max_rate is not None:
+            with np.errstate(invalid="ignore"):
+                bad = np.hypot(d["range_offset"], d["along_track_offset"]) / d["days"] > max_rate
+            d["range_offset"] = np.where(bad, np.nan, d["range_offset"])
+            d["along_track_offset"] = np.where(bad, np.nan, d["along_track_offset"])
+            d["n_blunders"] = int(bad.sum())
+        d["max_rate"] = max_rate
+        if reference_mask is not None:
             d["noise_sigma"] = (_robust_sigma(d["range_offset"][ref]),
                                 _robust_sigma(d["along_track_offset"][ref]))
         pairs.append(d)
@@ -251,6 +267,7 @@ def load_nisar_goff_stack(
     crop_to_site: tuple[float, float, float] | None = None,
     reference_mask: np.ndarray | None = None,
     gap_policy: str = "break",
+    max_rate: float | None = None,
 ) -> NISARTimeseries:
     """
     Load NISAR GOFF (offset field) products as a displacement time series.
@@ -258,13 +275,14 @@ def load_nisar_goff_stack(
     ``displacement`` is the slant-range component (positive = away from the
     sensor per NISAR convention); ``displacement_along_track`` holds the
     along-track component. ``coherence`` is the fraction of pairs in which
-    each pixel passed the SNR mask. See ``read_goff_pairs`` for the masking
-    and referencing, and the module docstring for ``gap_policy``.
+    each pixel passed the SNR mask (and ``max_rate``). See ``read_goff_pairs``
+    for the masking, blunder rejection and referencing, and the module docstring for ``gap_policy``.
     """
     if gap_policy not in GAP_POLICIES:
         raise ValueError(f"gap_policy must be one of {GAP_POLICIES}")
     offsets = read_goff_pairs(goff_dir, layer=layer, min_snr=min_snr, track=track,
-                              crop_to_site=crop_to_site, reference_mask=reference_mask)
+                              crop_to_site=crop_to_site, reference_mask=reference_mask,
+                              max_rate=max_rate)
     if not offsets:
         raise ValueError("No valid GOFF products loaded")
     logger.info("Loaded %d NISAR GOFF pairs (%s, SNR≥%g)", len(offsets), layer, min_snr)
@@ -290,6 +308,7 @@ def load_nisar_goff_stack(
         source="GOFF",
         metadata={"n_offsets": len(offsets), "sensor": "NISAR",
                   "method": "pixel_offset_tracking", "layer": layer, "min_snr": min_snr,
+                  "max_rate": max_rate,
                   "track": track, "referenced": reference_mask is not None,
                   "pairs": [{"ref": d["ref_date"], "sec": d["sec_date"],
                              "noise_sigma": d.get("noise_sigma")} for d in offsets],

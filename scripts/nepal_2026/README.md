@@ -30,6 +30,8 @@ Crops land in `data/nisar/nepal_2026/` (gitignored).
 | `acceptance_phase1d.py [S2_DIR] [GOFF_DIR]` | Phase 1d: empirical noise model for Sentinel-2 (D1) and GOFF main-glacier control (D2) (`docs/acceptance_phase1d.md`); prints progress per pair |
 | `phase2_controls.py` | Phase 2: detectors E1, E2, E1f, E2f on Nepal and the Ganesh East and Jugal Himal control sites (`docs/acceptance_phase2.md`) |
 | `dev_gates.py` | Phase 2b (development, no pass/fail): magnitude, ratio and blunder gates on E2 across Nepal and both Phase 2 controls (`docs/dev_phase2b.md`) |
+| `diag_residuals.py` | Phase 2b follow-up (development): residual false alarms after loader blunder rejection, with terrain, Sentinel-2 surface, direction and seasonal rates (`docs/dev_phase2b.md`) |
+| `diag_premelt.py` | Phase 2b follow-up (development): pre-melt acceleration of the Nepal outlet vs every moving pixel at both controls (`docs/dev_phase2b.md`) |
 | `diag_false_alarms.py [GOFF_DIR]` | Development diagnosis of the Phase 1e false alarms (terrain, SNR, surface, direction) used to choose Phase 2 filters |
 | `replay_goff.py [GOFF_DIR]` | Phase 1e: replays GOFF pair by pair through GLEWS's pipeline (E1) and a rate-change detector (E2); lead time and false alarms (`docs/acceptance_phase1e.md`) |
 | `injection_s2.py [S2_DIR]` | Injects 6 and 12 m/yr westward motion into the scar to check that the post-hoc re-test can see it |

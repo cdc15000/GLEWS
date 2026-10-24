@@ -305,3 +305,31 @@ class TestGoffLoader:
             with h5py.File(fp, "a") as f:
                 f[f"{GOFF_BASE}/layer2/slantRangeOffset"].attrs["units"] = b"pixels"
         assert read_goff_pairs(d) == []        # every file fails to read and is skipped
+
+    def test_max_rate_masks_blunders_after_referencing(self, tmp_path):
+        d, ref = self._stack(tmp_path)
+        fp = sorted(d.glob("*.h5"))[1]
+        with h5py.File(fp, "a") as f:
+            f[f"{GOFF_BASE}/layer2/slantRangeOffset"][2, 8] = 40.0      # mismatched window
+        kept = read_goff_pairs(d, reference_mask=ref)
+        assert np.isfinite(kept[1]["range_offset"][2, 8])            # off by default
+        pairs = read_goff_pairs(d, reference_mask=ref, max_rate=5.0 / 12)
+        p = pairs[1]
+        assert np.isnan(p["range_offset"][2, 8]) and np.isnan(p["along_track_offset"][2, 8])
+        assert p["n_blunders"] == 1
+        assert np.isfinite(p["range_offset"][5, 7])                  # 1.1 m / 12 d source survives
+        assert pairs[0]["n_blunders"] == 0
+
+    def test_max_rate_uses_both_components_and_pair_length(self, tmp_path):
+        d, ref = self._stack(tmp_path)
+        # source moves hypot(1.0, 0.5) ≈ 1.12 m in 12 days ≈ 0.093 m/day
+        pairs = read_goff_pairs(d, reference_mask=ref, max_rate=0.08)
+        assert all(np.isnan(p["range_offset"][5, 7]) for p in pairs)
+        pairs = read_goff_pairs(d, reference_mask=ref, max_rate=0.11)
+        assert all(np.isfinite(p["range_offset"][5, 7]) for p in pairs)
+
+    def test_stack_passes_max_rate(self, tmp_path):
+        d, ref = self._stack(tmp_path)
+        ts = load_nisar_goff_stack(d, reference_mask=ref, max_rate=0.08)
+        assert np.isnan(ts.displacement[1:, 5, 7]).all()
+        assert ts.metadata["max_rate"] == 0.08
