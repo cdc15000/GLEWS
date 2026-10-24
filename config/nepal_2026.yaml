@@ -50,6 +50,36 @@ site:
       - [28.2895, 85.5218]
       - [28.2878, 85.5207]
       - [28.2858, 85.5199]
+  # Wang et al. (2026, Landslides 23:3489, doi:10.1007/s10346-026-02842-6)
+  # Fig. 1b "measurement area": the outlet hanging glacier on the NE edge of
+  # the failed slope, where they report 7.4 m/yr (2018-2025) rising to
+  # 55 m/yr from January 2026. Georeferenced by matching their panel to our
+  # own 12 Aug 2026 Sentinel-2 image (NCC 0.75, 2.105 m per
+  # figure pixel; scripts/nepal_2026/register_wang_fig1b.py). ~0.067 km2.
+  reference_areas:
+    - label: "Wang et al. 2026 measurement area (Fig. 1b)"
+      polygon:
+        - [28.29255, 85.52951]
+        - [28.29194, 85.52968]
+        - [28.29131, 85.52979]
+        - [28.29066, 85.52992]
+        - [28.28998, 85.53003]
+        - [28.28931, 85.53013]
+        - [28.28864, 85.53024]
+        - [28.28796, 85.53032]
+        - [28.28731, 85.53038]
+        - [28.28730, 85.53009]
+        - [28.28770, 85.52969]
+        - [28.28812, 85.52931]
+        - [28.28852, 85.52890]
+        - [28.28894, 85.52852]
+        - [28.28935, 85.52811]
+        - [28.28985, 85.52812]
+        - [28.29038, 85.52838]
+        - [28.29090, 85.52864]
+        - [28.29137, 85.52888]
+        - [28.29189, 85.52914]
+        - [28.29243, 85.52939]
   # Months when snow decorrelates high-elevation InSAR here (coherence over
   # the source fell to 0.1-0.2 in Mar-May 2026 NISAR pairs). Shaded on the
   # dashboard time-series and peak-date histogram.
