@@ -9,9 +9,15 @@ Two passes, both cached (re-running only fetches what is missing):
    20 m scene classification (SCL) over the crop and record cloud, shadow,
    snow and nodata fractions over the source polygon and the stable ring
    in OUT_DIR/index.json.
-2. For scenes whose source is <= 30 % cloud or shadow, with no nodata,
-   read the 10 m near-infrared band (B08) over the crop into
+2. For scenes whose source is <= 30 % cloud or cloud shadow, with no
+   nodata, read the 10 m near-infrared band (B08) over the crop into
    OUT_DIR/b08/<scene>.npz.
+
+Correction (24 Oct 2026): the first version also excluded SCL class 2
+("dark area"), which over this source flags sunlit dark rock and debris,
+not shadow. It dropped the clear 12 and 24 Aug 2026 scenes. Class 2 is now
+recorded (``dark``) but no longer used to exclude scenes. Scenes classified
+by the first version are re-classified to add the separate fields.
 
 The crop is 11 x 11 km centred on the source, in the tile's CRS
 (EPSG:32645, the same as the NISAR grids).
@@ -52,7 +58,7 @@ scenes = search_sentinel2(site["latitude"], site["longitude"], "2017-01-01", "20
 print(f"{len(scenes)} scenes on R{ORBIT:03d}; {len(index)} already classified", flush=True)
 
 for sc in scenes:
-    if sc.id in index:
+    if sc.id in index and "cloud_shadow" in index[sc.id]["source"]:
         continue
     for attempt in range(3):
         try:
@@ -71,8 +77,8 @@ for sc in scenes:
 idx_path.write_text(json.dumps(index, indent=1))
 
 good = {k: v for k, v in index.items()
-        if v["source"]["cloud"] + v["source"]["shadow"] <= MAX_BAD and v["source"]["nodata"] == 0}
-print(f"{len(good)} of {len(index)} scenes have a usable source (cloud+shadow <= {MAX_BAD:.0%})", flush=True)
+        if v["source"]["cloud"] + v["source"]["cloud_shadow"] <= MAX_BAD and v["source"]["nodata"] == 0}
+print(f"{len(good)} of {len(index)} scenes have a usable source (cloud + cloud shadow <= {MAX_BAD:.0%})", flush=True)
 for k, v in sorted(good.items(), key=lambda kv: kv[1]["datetime"]):
     dst = OUT / "b08" / f"{k}.npz"
     if dst.exists():

@@ -40,6 +40,8 @@ COLLECTION = "sentinel-2-c1-l2a"
 SCL_NODATA = (0,)
 SCL_CLOUD = (8, 9, 10)          # medium, high probability, thin cirrus
 SCL_SHADOW = (2, 3)             # dark area / topographic shadow, cloud shadow
+SCL_DARK = (2,)                 # "dark area pixels": also catches dark rock and debris
+SCL_CLOUD_SHADOW = (3,)
 SCL_SNOW = (11,)
 
 _ORBIT_RE = re.compile(r"_R(\d{3})_")
@@ -139,12 +141,20 @@ def read_window(href: str, bounds: tuple[float, float, float, float]) -> tuple[n
 
 
 def scl_fractions(scl: np.ndarray, mask: np.ndarray) -> dict:
-    """Fractions of ``mask`` pixels in each SCL group (cloud, shadow, snow, nodata)."""
+    """
+    Fractions of ``mask`` pixels in each SCL group.
+
+    ``shadow`` is dark area plus cloud shadow. Dark area (class 2) is
+    reported separately as ``dark`` because it also flags sunlit dark rock
+    and debris; ``cloud_shadow`` (class 3) is the part caused by cloud.
+    """
     v = scl[mask]
     n = max(v.size, 1)
     return {
         "cloud": round(float(np.isin(v, SCL_CLOUD).sum() / n), 3),
         "shadow": round(float(np.isin(v, SCL_SHADOW).sum() / n), 3),
+        "dark": round(float(np.isin(v, SCL_DARK).sum() / n), 3),
+        "cloud_shadow": round(float(np.isin(v, SCL_CLOUD_SHADOW).sum() / n), 3),
         "snow": round(float(np.isin(v, SCL_SNOW).sum() / n), 3),
         "nodata": round(float(np.isin(v, SCL_NODATA).sum() / n), 3),
     }
@@ -229,6 +239,50 @@ def offset_field(
         shift_c = np.nan_to_num(dx.astype(np.float64))
     return OffsetField(dx.reshape(ny, nx), dy.reshape(ny, nx), peak.reshape(ny, nx),
                        r_tl + window // 2, c_tl + window // 2, window, step)
+
+
+def offset_points(
+    ref: np.ndarray,
+    sec: np.ndarray,
+    rows: np.ndarray,
+    cols: np.ndarray,
+    window: int = 16,
+    upsample: int = 20,
+    batch: int = 4000,
+    passes: int = 2,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Offsets (dx east, dy south, in pixels) and correlation peak at chosen
+    window centres (``rows``, ``cols``), with the same matching as
+    ``offset_field``. Centres whose window would leave the image are NaN.
+    """
+    if ref.shape != sec.shape:
+        raise ValueError("ref and sec must have the same shape")
+    ref = np.asarray(ref, np.float32)
+    sec = np.asarray(sec, np.float32)
+    H, W = ref.shape
+    wa = sliding_window_view(ref, (window, window))
+    wb = sliding_window_view(sec, (window, window))
+    R_TL = np.asarray(rows, int) - window // 2
+    C_TL = np.asarray(cols, int) - window // 2
+    inside = (R_TL >= 0) & (C_TL >= 0) & (R_TL <= H - window) & (C_TL <= W - window)
+    R_TL, C_TL = np.clip(R_TL, 0, H - window), np.clip(C_TL, 0, W - window)
+    taper = np.outer(np.hanning(window), np.hanning(window)).astype(np.float32)
+    n = len(R_TL)
+    dx = np.full(n, np.nan, np.float32); dy = np.full_like(dx, np.nan); peak = np.zeros_like(dx)
+    shift_r = np.zeros(n); shift_c = np.zeros(n)
+    for _ in range(max(1, passes)):
+        ir = np.clip(R_TL + np.round(shift_r).astype(int), 0, H - window)
+        ic = np.clip(C_TL + np.round(shift_c).astype(int), 0, W - window)
+        for s in range(0, n, batch):
+            sl = slice(s, s + batch)
+            sr, sc, pk, ok = _correlate(wa[R_TL[sl], C_TL[sl]], wb[ir[sl], ic[sl]], taper, upsample)
+            dy[sl] = np.where(ok, ir[sl] - R_TL[sl] + sr, np.nan)
+            dx[sl] = np.where(ok, ic[sl] - C_TL[sl] + sc, np.nan)
+            peak[sl] = np.where(ok, pk, 0)
+        shift_r = np.nan_to_num(dy.astype(np.float64)); shift_c = np.nan_to_num(dx.astype(np.float64))
+    dx[~inside] = np.nan; dy[~inside] = np.nan; peak[~inside] = 0
+    return dx, dy, peak
 
 
 def _correlate(ca: np.ndarray, cb: np.ndarray, taper: np.ndarray, upsample: int):

@@ -9,6 +9,7 @@ from glews.optical import (
     _scene_from_feature,
     highpass,
     offset_field,
+    offset_points,
     reference_offsets,
     scl_fractions,
 )
@@ -75,7 +76,8 @@ def test_scl_fractions():
     scl = np.array([[0, 3, 8, 11], [4, 4, 5, 2]])
     m = np.ones_like(scl, bool)
     fr = scl_fractions(scl, m)
-    assert fr == {"cloud": 0.125, "shadow": 0.25, "snow": 0.125, "nodata": 0.125}
+    assert fr == {"cloud": 0.125, "shadow": 0.25, "dark": 0.125, "cloud_shadow": 0.125,
+                  "snow": 0.125, "nodata": 0.125}
 
 
 def test_highpass_removes_gradient():
@@ -94,3 +96,12 @@ def test_scene_from_feature_parses_orbit():
     sc = _scene_from_feature(f)
     assert sc.relative_orbit == 119 and sc.date == "2025-12-30"
     assert sc.hrefs == {"nir": "https://x/B08.tif"}
+
+
+def test_offset_points_matches_field_and_flags_edges():
+    ref = _texture(128, seed=4)
+    sec = nd_shift(ref, (-1.4, 2.3), order=3, mode="wrap")
+    dx, dy, pk = offset_points(ref, sec, np.array([64, 40, 3]), np.array([64, 80, 3]), window=16)
+    assert dx[:2] == pytest.approx([2.3, 2.3], abs=0.15)   # 16 px windows: ~0.1 px precision
+    assert dy[:2] == pytest.approx([-1.4, -1.4], abs=0.15)
+    assert np.isnan(dx[2]) and pk[2] == 0          # window would leave the image
