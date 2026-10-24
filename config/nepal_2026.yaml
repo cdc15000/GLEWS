@@ -80,6 +80,21 @@ site:
         - [28.29137, 85.52888]
         - [28.29189, 85.52914]
         - [28.29243, 85.52939]
+    # Wang et al. (2026) Fig. 2a boxes, placed using the measurement area above
+    # as anchor and the 2 km scale bar (5.602 m/px; the triangle's size gives
+    # 5.71); scripts/nepal_2026/register_wang_fig2a.py.
+    - label: "Wang et al. 2026 main glacier box (Fig. 2a; 42.2 m/yr steady)"
+      polygon:
+        - [28.29027, 85.53346]
+        - [28.28822, 85.53715]
+        - [28.28631, 85.53580]
+        - [28.28835, 85.53211]
+    - label: "Wang et al. 2026 stable area box (Fig. 2a)"
+      polygon:
+        - [28.30229, 85.50909]
+        - [28.30236, 85.51291]
+        - [28.30046, 85.51296]
+        - [28.30039, 85.50913]
   # Months when snow decorrelates high-elevation InSAR here (coherence over
   # the source fell to 0.1-0.2 in Mar-May 2026 NISAR pairs). Shaded on the
   # dashboard time-series and peak-date histogram.

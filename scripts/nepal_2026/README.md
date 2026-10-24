@@ -25,6 +25,7 @@ Crops land in `data/nisar/nepal_2026/` (gitignored).
 | `acceptance_s2.py [S2_DIR]` | Pre-registered Sentinel-2 acceptance tests A2 and A3 |
 | `terrain_rank_goff.py [GOFF_DIR]` | Phase 1b: GOFF source signal against terrain of the same slope and aspect (`docs/acceptance_phase1b.md`) |
 | `register_wang_fig1b.py FIG1B_PNG` | Georeferences Wang et al. (2026) Fig. 1b against our 12 Aug 2026 image and traces their measurement area (stored in `config/nepal_2026.yaml`) |
+| `register_wang_fig2a.py FIG2AB_PNG` | Places Wang et al. Fig. 2a (main-glacier and stable boxes) using the measurement area and the scale bar |
 | `acceptance_phase1c.py [S2_DIR] [GOFF_DIR]` | Phase 1c tests C1–C4 over that area (`docs/acceptance_phase1c.md`) |
 | `injection_s2.py [S2_DIR]` | Injects 6 and 12 m/yr westward motion into the scar to check that the post-hoc re-test can see it |
 | `posthoc_s2.py [S2_DIR]` | Post-hoc Sentinel-2 re-test over the mapped scar (labelled post hoc; see the acceptance doc) |
