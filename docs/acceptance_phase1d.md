@@ -83,4 +83,65 @@ Also reported, without pass/fail:
 
 ## Results
 
-*(added after the run)*
+*(added after the run, 24 Oct 2026; `scripts/nepal_2026/acceptance_phase1d.py`,
+`output/acceptance/D_phase1d.json`)*
+
+### D2 (main-glacier control): PASS
+
+GOFF slant-range rate (m/yr) by period:
+
+| Area | Pixels | 28 Nov–15 Jan | 15 Jan–28 Mar | 28 Mar–27 May | 27 May–26 Jul | 26 Jul–19 Aug | R |
+|---|---|---|---|---|---|---|---|
+| Measurement area (outlet) | 9 | 16.5 | 36.9 | 35.4 | 54.3 | 60.2 | **3.39** |
+| Main-glacier box | 16 | 15.7 | 14.2 | 14.3 | 19.9 | 24.7 | **1.36** |
+
+R_main = 1.36 ≤ 1.5, and R_area = 3.39 ≥ 2 × R_main. The per-pair series
+of the two areas correlate weakly (r = 0.24).
+
+The main glacier is steady from November to May with a modest summer
+rise. The outlet's mid-January step and continued acceleration are not
+leakage from it. The main glacier averages 16.7 m/yr in slant range, or
+≈ 27 m/yr horizontal under the slope-parallel assumption (range
+sensitivity 0.61 on its slope). Wang et al. give 42.2 m/yr: the same order,
+lower here.
+
+### D1 (empirical noise model): D1a FAIL, D1b FAIL
+
+There are 100 stable copies of the area. The empirical σ of the area
+statistic is 1.9–3.2 m/yr for year pairs, against 3.8–8.1 m/yr from
+per-window σ in C1.
+
+| Year pair | Pairs | Speed (m/yr) | σ_patch | Rank among stable copies |
+|---|---|---|---|---|
+| 2018→19 | 4 | 4.0 | 2.7 | 62 % |
+| 2019→20 | 56 | 3.7 | 2.2 | 71 % |
+| 2020→21 | 63 | 3.1 | 2.1 | 65 % |
+| 2021→22 | 12 | 1.6 | 2.7 | 32 % |
+| 2022→23 | 10 | 1.6 | 3.2 | 24 % |
+| 2023→24 | 54 | 2.8 | 2.6 | 57 % |
+| 2024→25 | 56 | 5.7 | 1.9 | 75 % |
+
+- **D1a:** v1 = 3.1 m/yr, σ1 = 2.6. That is below the 3.7 floor and
+  below 2 σ1.
+- **D1b:** v2 = 34.6 m/yr, σ2 = 14.5. v2 ≥ 2 v1, but
+  (v2 − v1) / combined σ = **2.13**, short of 3.
+- **Decisive detail:** the area's 2026 speed ranks at only the 50th–89th
+  percentile among stable copies in the same 12 summer pairs. Stable ground
+  shows apparent speeds of the same size in those pairs. The consistency
+  across the 12 combinations noted in C2 reflects shared scenes (every
+  pair ends on 12 or 24 Aug), not a distinguishable signal.
+
+**Conclusion:** at 10 m, Sentinel-2 does not separate the measurement
+area's motion from noise, before 2026 or in 2026. Year-pair ranks are
+24–75 %, and summer-2026 ranks 50–89 %. GLEWS's evidence for the
+precursor rests on NISAR GOFF (C4, D2), not on Sentinel-2.
+
+### Phase 1 overall (A–D)
+
+| Evidence | Status |
+|---|---|
+| NISAR GOFF over the whole failed slope (A1) | Pass vs the crop; source moving in all 21 pairs (1b post hoc), not a slope-geometry bias |
+| NISAR GOFF over Wang et al.'s outlet area (C4) | 16.5 → 37 m/yr slant range at mid-January 2026, 54–60 m/yr by Jul–Aug; 28 m in 264 days (reported) |
+| Main-glacier control (D2) | **Pass:** the acceleration is specific to the outlet |
+| Sentinel-2 offsets (A2, A3, C1, C2, D1) | Fail: not separable from noise at this scale and season |
+| NISAR GUNW phase | Cannot measure the source |
