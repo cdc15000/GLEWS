@@ -28,6 +28,7 @@ Crops land in `data/nisar/nepal_2026/` (gitignored).
 | `register_wang_fig2a.py FIG2AB_PNG` | Places Wang et al. Fig. 2a (main-glacier and stable boxes) using the measurement area and the scale bar |
 | `acceptance_phase1c.py [S2_DIR] [GOFF_DIR]` | Phase 1c tests C1–C4 over that area (`docs/acceptance_phase1c.md`) |
 | `acceptance_phase1d.py [S2_DIR] [GOFF_DIR]` | Phase 1d: empirical noise model for Sentinel-2 (D1) and GOFF main-glacier control (D2) (`docs/acceptance_phase1d.md`); prints progress per pair |
+| `diag_false_alarms.py [GOFF_DIR]` | Development diagnosis of the Phase 1e false alarms (terrain, SNR, surface, direction) used to choose Phase 2 filters |
 | `replay_goff.py [GOFF_DIR]` | Phase 1e: replays GOFF pair by pair through GLEWS's pipeline (E1) and a rate-change detector (E2); lead time and false alarms (`docs/acceptance_phase1e.md`) |
 | `injection_s2.py [S2_DIR]` | Injects 6 and 12 m/yr westward motion into the scar to check that the post-hoc re-test can see it |
 | `posthoc_s2.py [S2_DIR]` | Post-hoc Sentinel-2 re-test over the mapped scar (labelled post hoc; see the acceptance doc) |
