@@ -1,7 +1,10 @@
 """Crop NISAR track-98 GOFF (pixel offset) products around the source via HTTP range reads.
 
 Usage (from the repository root):
-    python scripts/nepal_2026/extract_goff_crops.py OUT_DIR
+    python scripts/nepal_2026/extract_goff_crops.py OUT_DIR [LAT LON]
+
+LAT LON default to the Gyirong–Rasuwa source; pass another centre to crop a
+control site from the same products (Phase 2).
 
 Same pair selection as extract_gunw_crops.py: pre-event pairs only (the
 pair spanning the 26 Aug collapse is dropped), one product per date pair.
@@ -13,7 +16,8 @@ from pathlib import Path
 from utm import fwd
 
 OUT = Path(sys.argv[1]); OUT.mkdir(parents=True, exist_ok=True)
-LAT, LON, HALF = 28.288, 85.524, 6000.0
+LAT, LON = (float(sys.argv[2]), float(sys.argv[3])) if len(sys.argv) > 3 else (28.288, 85.524)
+HALF = 6000.0
 cx, cy = fwd(LAT, LON)
 FIELDS = ("slantRangeOffset", "alongTrackOffset", "slantRangeOffsetVariance",
           "alongTrackOffsetVariance", "correlationSurfacePeak", "snr")
