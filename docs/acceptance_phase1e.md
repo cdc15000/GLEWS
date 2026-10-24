@@ -81,4 +81,62 @@ cutoff with any hit, persistent or not.
 
 ## Results
 
-*(added after the run)*
+*(added after the run, 24 Oct 2026; `scripts/nepal_2026/replay_goff.py`,
+`output/acceptance/E_replay.json`, `E_replay.png`)*
+
+### E1 (existing GLEWS pipeline): FAIL, on false alarms
+
+| Cutoff | Flags | Target's rank | False alarms |
+|---|---|---|---|
+| 8 Feb | 5 | — | 5 |
+| 20 Feb | 5 | — | 5 |
+| 4 Mar | 7 | — | 7 |
+| **16 Mar** | 12 | **7** | 11 |
+| 28 Mar | 112 | 7 | 110 |
+| 9 Apr | 119 | 6 | 117 |
+| 21 Apr | 94 | **2** | 93 |
+| 3 May | 90 | **1** | 88 |
+| 15 May | 75 | 2 | 72 |
+| 27 May | 82 | 3 | 80 |
+| 8 Jun | 64 | 2 | 62 |
+| 20 Jun | 73 | 3 | 71 |
+| 2 Jul | 76 | 5 | 74 |
+| 14 Jul | 87 | 3 | 85 |
+| 26 Jul | 86 | 5 | 84 |
+| 19 Aug | 82 | 3 | 80 |
+
+- Criterion 1 passes: a persistent hit from 16 Mar, lead **163 days**.
+- Criterion 2 fails: the target ranks 7th at that first cutoff, not top 3.
+- Criterion 3 fails: 84 false-alarm flags at 26 Jul, against a limit of 10.
+
+Descriptive only (not a pre-registered metric): from 21 Apr onward the
+target ranks in the **top 3 at 8 of 10 cutoffs** (5th at 2 Jul and 26 Jul),
+and **1st on 3 May**. The flag count jumps from 12 to 112 at the
+28 Mar cutoff, when the first snowmelt-season pairs enter the stack.
+
+### E2 (rate-change detector): FAIL, on false alarms
+
+- Criterion 1 passes: a persistent hit from 20 Feb (the first cutoff
+  where alarms are possible), lead **187 days**. The target's alarm area
+  grows from 20 pixels (Feb) to 78 (early July).
+- Criterion 2 fails: **52 distinct false-alarm flags** over all cutoffs,
+  covering 15.0 km² (10 % of the crop), against a limit of 5.
+- False-alarm area per cutoff rises from 3.9 km² (Feb) to 8.2 km² (Aug).
+  The false alarms fall on other glaciers, steep faces and snow-covered
+  slopes across the crop (`E_replay.png`). One large cluster sits just
+  north-west of the outline.
+
+### Conclusion
+
+On the data as it arrived, both detectors flag the failed slope
+**early and persistently**: from mid-March (E1, 163 days) or mid-February
+(E2, 187 days). Both also flag tens of other places in the same 144 km².
+GLEWS's existing pipeline ranks the slope among its top three flags for
+most of the final four months, so an analyst reviewing the top few flags
+would have seen it. That review rule was not pre-registered.
+
+As specified, neither detector meets the false-alarm limits. The
+precursor is **detectable but not yet specific**. The next work is
+specificity: the snowmelt-season jump in E1, and the glacier and snow
+false alarms in E2. That is Phase 2 (false-alarm study) territory, now
+with a known true positive to test against.
