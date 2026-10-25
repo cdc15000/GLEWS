@@ -19,6 +19,7 @@ glews/pyvenv.cfg
 notebooks/data/nisar/
 data/nisar/
 data/sentinel2/
+data/exposure/
 *.h5
 *.hdf5
 
