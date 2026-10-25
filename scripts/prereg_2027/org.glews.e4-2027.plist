@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template: install_launchd.sh fills in __REPO__ and __HOME__. Runs daily at 07:00 local time;
+     launchd runs a missed calendar job when the Mac next wakes. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>org.glews.e4-2027</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-l</string>
+    <string>__REPO__/scripts/prereg_2027/daily_run.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>7</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/glews-e4-2027.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/glews-e4-2027.log</string>
+</dict>
+</plist>
