@@ -35,6 +35,7 @@ Crops land in `data/nisar/nepal_2026/` (gitignored).
 | `dev_premelt_detector.py` | Phase 2b (development): sweep of the pre-melt acceleration detector E4; its `prepare`/`run` are the frozen E4 used in Phase 2c |
 | `select_controls.py` | Terrain, Sentinel-2 snow/ice, frame coverage and ASF pair metadata for candidate control sites (no GOFF values read) |
 | `phase2c_controls.py` | Phase 2c: E4 vs E2 on the fresh Annapurna Sanctuary and Langtang East controls (`docs/acceptance_phase2c.md`) |
+| `dev_s1_checks.py` | Phase 2d (development): go/no-go for an ITS_LIVE Sentinel-1 multi-year baseline on the seen sites (`docs/dev_phase2d_s1.md`) |
 | `diag_false_alarms.py [GOFF_DIR]` | Development diagnosis of the Phase 1e false alarms (terrain, SNR, surface, direction) used to choose Phase 2 filters |
 | `replay_goff.py [GOFF_DIR]` | Phase 1e: replays GOFF pair by pair through GLEWS's pipeline (E1) and a rate-change detector (E2); lead time and false alarms (`docs/acceptance_phase1e.md`) |
 | `injection_s2.py [S2_DIR]` | Injects 6 and 12 m/yr westward motion into the scar to check that the post-hoc re-test can see it |
